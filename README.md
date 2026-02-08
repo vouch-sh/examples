@@ -25,6 +25,8 @@ Server-side applications that securely store a client secret. Uses the Authoriza
 | FastAPI + Authlib | [`web/fastapi-authlib`](web/fastapi-authlib) | Python |
 | Spring Boot | [`web/spring-boot`](web/spring-boot) | Java |
 | Axum + openidconnect | [`web/axum-openidconnect`](web/axum-openidconnect) | Rust |
+| Go + go-oidc | [`web/go-oidc`](web/go-oidc) | Go |
+| ASP.NET Core | [`web/aspnet-core`](web/aspnet-core) | C# |
 
 ### Single Page Applications (Public Clients)
 
@@ -35,6 +37,8 @@ Browser-only applications using PKCE (no client secret required).
 | React + react-oidc-context | [`spa/react`](spa/react) | JavaScript |
 | Vue + oidc-client-ts | [`spa/vue`](spa/vue) | JavaScript |
 | Vanilla JS + oidc-client-ts | [`spa/vanilla-js`](spa/vanilla-js) | JavaScript |
+| SvelteKit + oidc-client-ts | [`spa/sveltekit`](spa/sveltekit) | JavaScript |
+| Angular + angular-auth-oidc-client | [`spa/angular`](spa/angular) | TypeScript |
 
 ### Native & CLI Applications (Public Clients)
 
@@ -45,6 +49,16 @@ Terminal tools and headless servers using the Device Authorization Grant (RFC 86
 | Python + requests | [`native/python`](native/python) | Python |
 | Node.js + fetch | [`native/node`](native/node) | Node.js |
 | Rust + reqwest | [`native/rust`](native/rust) | Rust |
+
+### AI Agent Protocols
+
+Secure AI agent communication using Vouch for hardware-backed authentication.
+
+| Protocol | Directory | Description |
+|----------|-----------|-------------|
+| MCP Remote Server (TypeScript) | [`mcp/remote-server-ts`](mcp/remote-server-ts) | [Model Context Protocol](https://modelcontextprotocol.io/) server with Bearer auth + Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) |
+| MCP Remote Server (Python) | [`mcp/remote-server-py`](mcp/remote-server-py) | Same as above, in Python with FastMCP |
+| A2A Agent (Python) | [`a2a/python-agent`](a2a/python-agent) | [Agent-to-Agent](https://github.com/a2aproject/A2A) agent with OpenID Connect security scheme in the Agent Card |
 
 ## Quick Start
 
