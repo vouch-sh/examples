@@ -1,0 +1,20 @@
+server:
+  port: 3000
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          vouch:
+            client-id: ${VOUCH_CLIENT_ID}
+            client-secret: ${VOUCH_CLIENT_SECRET}
+            scope: openid,email
+            authorization-grant-type: authorization_code
+            redirect-uri: ${VOUCH_REDIRECT_URI:http://localhost:3000/login/oauth2/code/vouch}
+        provider:
+          vouch:
+            issuer-uri: ${VOUCH_ISSUER}
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html

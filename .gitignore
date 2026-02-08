@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+vendor/
+target/
+.gradle/
+build/
+
+# Environment
+.env
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+.next/
