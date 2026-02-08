@@ -15,7 +15,7 @@ response = requests.post(
     f'{VOUCH_ISSUER}/oauth/device',
     data={
         'client_id': CLIENT_ID,
-        'scope': 'openid email profile',
+        'scope': 'openid email',
     },
 )
 response.raise_for_status()
@@ -50,7 +50,6 @@ while True:
             headers={'Authorization': f"Bearer {tokens['access_token']}"},
         ).json()
 
-        print(f"Name: {userinfo.get('name', 'N/A')}")
         print(f"Email: {userinfo.get('email', 'N/A')}")
         print(f"Hardware verified: {userinfo.get('hardware_verified', False)}")
         break

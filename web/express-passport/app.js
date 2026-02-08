@@ -22,12 +22,11 @@ passport.use('vouch', new OpenIDConnectStrategy({
   clientID: process.env.VOUCH_CLIENT_ID,
   clientSecret: process.env.VOUCH_CLIENT_SECRET,
   callbackURL: process.env.VOUCH_REDIRECT_URI || 'http://localhost:3000/auth/vouch/callback',
-  scope: ['openid', 'email', 'profile'],
+  scope: ['openid', 'email'],
 }, (issuer, profile, context, idToken, accessToken, refreshToken, done) => {
   return done(null, {
     id: profile.id,
     email: profile.emails?.[0]?.value,
-    name: profile.displayName,
     hardwareVerified: idToken?.hardware_verified,
   });
 }));
@@ -43,8 +42,7 @@ app.get('/', (req, res) => {
       <head><title>Vouch + Express</title></head>
       <body>
         <h1>Vouch OIDC + Express + Passport</h1>
-        <p>Welcome, ${req.user.name}</p>
-        <p>Email: ${req.user.email}</p>
+        <p>Signed in as ${req.user.email}</p>
         ${req.user.hardwareVerified ? '<p><strong>Hardware Verified</strong></p>' : ''}
         <a href="/logout">Sign out</a>
       </body>

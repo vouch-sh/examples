@@ -3,8 +3,7 @@
 <head><title>Vouch + Spring Boot</title></head>
 <body>
   <h1>Vouch OIDC + Spring Boot</h1>
-  <p>Welcome, <span th:text="${name}"></span></p>
-  <p>Email: <span th:text="${email}"></span></p>
+  <p>Signed in as <span th:text="${email}"></span></p>
   <p th:if="${hardwareVerified}"><strong>Hardware Verified</strong></p>
   <form th:action="@{/logout}" method="post">
     <button type="submit">Sign out</button>

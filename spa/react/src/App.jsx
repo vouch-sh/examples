@@ -26,8 +26,7 @@ export default function App() {
       <h1>Vouch OIDC + React SPA</h1>
       {auth.isAuthenticated ? (
         <div>
-          <p>Welcome, {auth.user?.profile.name}</p>
-          <p>Email: {auth.user?.profile.email}</p>
+          <p>Signed in as {auth.user?.profile.email}</p>
           {auth.user?.profile.hardware_verified && (
             <p><strong>Hardware Verified</strong></p>
           )}

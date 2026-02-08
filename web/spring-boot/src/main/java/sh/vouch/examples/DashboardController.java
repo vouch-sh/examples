@@ -17,7 +17,6 @@ public class DashboardController {
     @GetMapping("/dashboard")
     public String dashboard(@AuthenticationPrincipal OidcUser user, Model model) {
         model.addAttribute("email", user.getEmail());
-        model.addAttribute("name", user.getFullName());
         model.addAttribute("hardwareVerified", user.getClaim("hardware_verified"));
         return "dashboard";
     }

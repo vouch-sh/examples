@@ -11,7 +11,7 @@ oauth.register(
     client_id=os.environ.get('VOUCH_CLIENT_ID'),
     client_secret=os.environ.get('VOUCH_CLIENT_SECRET'),
     server_metadata_url=f"{os.environ.get('VOUCH_ISSUER')}/.well-known/openid-configuration",
-    client_kwargs={'scope': 'openid email profile'},
+    client_kwargs={'scope': 'openid email'},
 )
 
 TEMPLATE = """
@@ -21,8 +21,7 @@ TEMPLATE = """
 <body>
   <h1>Vouch OIDC + Flask + Authlib</h1>
   {% if user %}
-    <p>Welcome, {{ user.name }}</p>
-    <p>Email: {{ user.email }}</p>
+    <p>Signed in as {{ user.email }}</p>
     {% if user.hardware_verified %}
       <p><strong>Hardware Verified</strong></p>
     {% endif %}
@@ -50,7 +49,6 @@ def callback():
     userinfo = token.get('userinfo')
     session['user'] = {
         'email': userinfo.get('email'),
-        'name': userinfo.get('name'),
         'hardware_verified': userinfo.get('hardware_verified', False),
     }
     return redirect('/')

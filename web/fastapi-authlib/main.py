@@ -16,7 +16,7 @@ oauth.register(
     client_id=os.environ.get('VOUCH_CLIENT_ID'),
     client_secret=os.environ.get('VOUCH_CLIENT_SECRET'),
     server_metadata_url=f"{os.environ.get('VOUCH_ISSUER')}/.well-known/openid-configuration",
-    client_kwargs={'scope': 'openid email profile'},
+    client_kwargs={'scope': 'openid email'},
 )
 
 TEMPLATE = """
@@ -36,8 +36,7 @@ async def home(request: Request):
     if user:
         verified = '<p><strong>Hardware Verified</strong></p>' if user.get('hardware_verified') else ''
         content = f"""
-        <p>Welcome, {user['name']}</p>
-        <p>Email: {user['email']}</p>
+        <p>Signed in as {user['email']}</p>
         {verified}
         <a href="/logout">Sign out</a>
         """
@@ -56,7 +55,6 @@ async def callback(request: Request):
     userinfo = token.get('userinfo')
     request.session['user'] = {
         'email': userinfo.get('email'),
-        'name': userinfo.get('name'),
         'hardware_verified': userinfo.get('hardware_verified', False),
     }
     return RedirectResponse(url='/')

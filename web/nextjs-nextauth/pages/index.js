@@ -17,8 +17,7 @@ export default function Home() {
       <h1>Vouch OIDC + Next.js + NextAuth</h1>
       {session ? (
         <div>
-          <p>Welcome, {session.user.name}</p>
-          <p>Email: {session.user.email}</p>
+          <p>Signed in as {session.user.email}</p>
           {session.user.hardwareVerified && (
             <p><strong>Hardware Verified</strong></p>
           )}

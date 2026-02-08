@@ -4,8 +4,7 @@
 <body>
   <h1>Vouch OIDC + Django + django-allauth</h1>
   {% if user.is_authenticated %}
-    <p>Welcome, {{ user.get_full_name|default:user.username }}</p>
-    <p>Email: {{ user.email }}</p>
+    <p>Signed in as {{ user.email }}</p>
     <form method="post" action="{% url 'account_logout' %}">
       {% csrf_token %}
       <button type="submit">Sign out</button>

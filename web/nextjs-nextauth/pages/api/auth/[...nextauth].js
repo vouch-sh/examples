@@ -8,13 +8,12 @@ export default NextAuth({
     wellKnown: `${process.env.VOUCH_ISSUER}/.well-known/openid-configuration`,
     clientId: process.env.VOUCH_CLIENT_ID,
     clientSecret: process.env.VOUCH_CLIENT_SECRET,
-    authorization: { params: { scope: 'openid email profile' } },
+    authorization: { params: { scope: 'openid email' } },
     idToken: true,
     profile(profile) {
       return {
         id: profile.sub,
         email: profile.email,
-        name: profile.name,
         hardwareVerified: profile.hardware_verified,
         hardwareAaguid: profile.hardware_aaguid,
       };

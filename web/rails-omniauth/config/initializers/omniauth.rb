@@ -8,5 +8,5 @@ Rails.application.config.middleware.use OmniAuth::Builder do
       secret: ENV['VOUCH_CLIENT_SECRET'],
       redirect_uri: ENV['VOUCH_REDIRECT_URI'] || 'http://localhost:3000/auth/vouch/callback'
     },
-    scope: [:openid, :email, :profile]
+    scope: [:openid, :email]
 end

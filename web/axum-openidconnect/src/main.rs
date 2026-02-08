@@ -71,7 +71,6 @@ async fn home(session: Session) -> Html<String> {
     let user: Option<serde_json::Value> = session.get("user").await.unwrap_or(None);
 
     let content = if let Some(user) = user {
-        let name = user["name"].as_str().unwrap_or("Unknown");
         let email = user["email"].as_str().unwrap_or("Unknown");
         let hw = if user["hardware_verified"].as_bool().unwrap_or(false) {
             "<p><strong>Hardware Verified</strong></p>"
@@ -79,7 +78,7 @@ async fn home(session: Session) -> Html<String> {
             ""
         };
         format!(
-            "<p>Welcome, {name}</p><p>Email: {email}</p>{hw}<a href=\"/logout\">Sign out</a>"
+            "<p>Signed in as {email}</p>{hw}<a href=\"/logout\">Sign out</a>"
         )
     } else {
         "<a href=\"/login\">Sign in with Vouch</a>".to_string()
@@ -102,7 +101,6 @@ async fn login(State(state): State<AppState>) -> Redirect {
             Nonce::new_random,
         )
         .add_scope(Scope::new("email".to_string()))
-        .add_scope(Scope::new("profile".to_string()))
         .set_pkce_challenge(pkce_challenge)
         .url();
 
@@ -155,11 +153,6 @@ async fn callback(
         .email()
         .map(|e| e.as_str().to_string())
         .unwrap_or_default();
-    let name = claims
-        .name()
-        .and_then(|n| n.get(None))
-        .map(|n| n.as_str().to_string())
-        .unwrap_or_default();
     let hardware_verified = claims
         .additional_claims()
         .get("hardware_verified")
@@ -168,7 +161,6 @@ async fn callback(
 
     let user = serde_json::json!({
         "email": email,
-        "name": name,
         "hardware_verified": hardware_verified,
     });
 

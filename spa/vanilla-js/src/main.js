@@ -5,7 +5,7 @@ const config = {
   client_id: '__VOUCH_CLIENT_ID__',
   redirect_uri: '__VOUCH_REDIRECT_URI__',
   post_logout_redirect_uri: window.location.origin,
-  scope: 'openid email profile',
+  scope: 'openid email',
 };
 
 const userManager = new UserManager(config);
@@ -16,8 +16,7 @@ async function checkAuth() {
 
   if (user) {
     el.innerHTML = `
-      <p>Welcome, ${user.profile.name}</p>
-      <p>Email: ${user.profile.email}</p>
+      <p>Signed in as ${user.profile.email}</p>
       ${user.profile.hardware_verified ? '<p><strong>Hardware Verified</strong></p>' : ''}
       <button id="logout-btn">Sign out</button>
     `;

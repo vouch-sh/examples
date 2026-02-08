@@ -24,7 +24,6 @@ struct ErrorResponse {
 
 #[derive(Deserialize)]
 struct UserInfo {
-    name: Option<String>,
     email: Option<String>,
     hardware_verified: Option<bool>,
 }
@@ -41,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Request device code
     let device_response: DeviceResponse = client
         .post(format!("{issuer}/oauth/device"))
-        .form(&[("client_id", &client_id), ("scope", &"openid email profile".to_string())])
+        .form(&[("client_id", &client_id), ("scope", &"openid email".to_string())])
         .send()
         .await?
         .json()
@@ -81,7 +80,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .json()
                 .await?;
 
-            println!("Name: {}", userinfo.name.as_deref().unwrap_or("N/A"));
             println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
             println!("Hardware verified: {}", userinfo.hardware_verified.unwrap_or(false));
             return Ok(());

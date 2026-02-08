@@ -14,8 +14,7 @@ onMounted(async () => {
 <template>
   <div v-if="isLoading">Loading...</div>
   <div v-else-if="user">
-    <p>Welcome, {{ user.profile.name }}</p>
-    <p>Email: {{ user.profile.email }}</p>
+    <p>Signed in as {{ user.profile.email }}</p>
     <p v-if="user.profile.hardware_verified"><strong>Hardware Verified</strong></p>
     <button @click="logout">Sign out</button>
   </div>

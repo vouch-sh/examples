@@ -7,8 +7,7 @@ class SessionsController < ApplicationController
       <body>
         <h1>Vouch OIDC + Rails + OmniAuth</h1>
         <% if current_user %>
-          <p>Welcome, <%= current_user['name'] %></p>
-          <p>Email: <%= current_user['email'] %></p>
+          <p>Signed in as <%= current_user['email'] %></p>
           <% if current_user['hardware_verified'] %>
             <p><strong>Hardware Verified</strong></p>
           <% end %>
@@ -25,7 +24,6 @@ class SessionsController < ApplicationController
     auth = request.env['omniauth.auth']
     session[:user] = {
       'email' => auth.info.email,
-      'name' => auth.info.name,
       'hardware_verified' => auth.extra.raw_info&.hardware_verified
     }
     redirect_to root_path

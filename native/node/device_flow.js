@@ -13,7 +13,7 @@ async function deviceFlow() {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
-      scope: 'openid email profile',
+      scope: 'openid email',
     }),
   });
 
@@ -54,7 +54,6 @@ async function deviceFlow() {
       });
       const userinfo = await userinfoResponse.json();
 
-      console.log(`Name: ${userinfo.name || 'N/A'}`);
       console.log(`Email: ${userinfo.email || 'N/A'}`);
       console.log(`Hardware verified: ${userinfo.hardware_verified || false}`);
       return;
