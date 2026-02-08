@@ -1,4 +1,4 @@
-FROM rust:1.79-slim AS build
+FROM rust:1.93-slim-trixie AS build
 
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
@@ -10,7 +10,7 @@ RUN mkdir src && echo 'fn main() {}' > src/main.rs && cargo build --release && r
 COPY src/ src/
 RUN touch src/main.rs && cargo build --release
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 

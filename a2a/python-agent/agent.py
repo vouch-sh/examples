@@ -16,12 +16,8 @@ from a2a.types import (
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER')
+VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 PORT = int(os.environ.get('PORT', '3000'))
-
-if not VOUCH_ISSUER:
-    print('Error: VOUCH_ISSUER environment variable is required')
-    exit(1)
 
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 

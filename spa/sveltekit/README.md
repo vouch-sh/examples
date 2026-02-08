@@ -17,7 +17,7 @@ Uses [oidc-client-ts](https://github.com/authts/oidc-client-ts) with SvelteKit i
 ```bash
 docker build -t vouch-sveltekit .
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   vouch-sveltekit
 ```

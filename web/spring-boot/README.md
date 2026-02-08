@@ -6,7 +6,7 @@ Web Application (Confidential Client) using Vouch OIDC.
 
 | Variable | Description |
 |---|---|
-| `VOUCH_ISSUER` | OIDC issuer URI |
+| `VOUCH_ISSUER` | OIDC issuer URI (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | OAuth2 client ID |
 | `VOUCH_CLIENT_SECRET` | OAuth2 client secret |
 | `VOUCH_REDIRECT_URI` | Redirect URI (default: `http://localhost:3000/login/oauth2/code/vouch`) |
@@ -17,7 +17,7 @@ Web Application (Confidential Client) using Vouch OIDC.
 docker build -t vouch-spring-boot .
 
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-issuer.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
   vouch-spring-boot

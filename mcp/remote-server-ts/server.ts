@@ -4,13 +4,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { randomUUID } from 'node:crypto';
 
-const VOUCH_ISSUER = process.env.VOUCH_ISSUER!;
+const VOUCH_ISSUER = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const PORT = parseInt(process.env.PORT || '3000');
-
-if (!VOUCH_ISSUER) {
-  console.error('VOUCH_ISSUER environment variable is required');
-  process.exit(1);
-}
 
 const JWKS = createRemoteJWKSet(new URL(`${VOUCH_ISSUER}/oauth/jwks`));
 

@@ -10,7 +10,7 @@ Set the following environment variables:
 
 | Variable | Description |
 |---|---|
-| `VOUCH_ISSUER` | Your Vouch issuer URL (e.g. `https://your-org.vouch.sh`) |
+| `VOUCH_ISSUER` | Vouch issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | OAuth client secret |
 | `VOUCH_REDIRECT_URI` | Callback URL (default: `http://localhost:3000/auth/callback`) |
@@ -21,7 +21,7 @@ Set the following environment variables:
 docker build -t laravel-socialite-example .
 
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/auth/callback \

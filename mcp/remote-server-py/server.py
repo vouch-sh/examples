@@ -11,12 +11,8 @@ from starlette.responses import JSONResponse
 from starlette.middleware import Middleware
 import uvicorn
 
-VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER')
+VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 PORT = int(os.environ.get('PORT', '3000'))
-
-if not VOUCH_ISSUER:
-    print('Error: VOUCH_ISSUER environment variable is required')
-    exit(1)
 
 # JWKS client for token verification
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')

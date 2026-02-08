@@ -30,15 +30,18 @@ var states = map[string]bool{}
 
 func main() {
 	issuer := os.Getenv("VOUCH_ISSUER")
+	if issuer == "" {
+		issuer = "https://us.vouch.sh"
+	}
 	clientID := os.Getenv("VOUCH_CLIENT_ID")
 	clientSecret := os.Getenv("VOUCH_CLIENT_SECRET")
 	redirectURI := os.Getenv("VOUCH_REDIRECT_URI")
-
-	if issuer == "" || clientID == "" || clientSecret == "" {
-		log.Fatal("VOUCH_ISSUER, VOUCH_CLIENT_ID, and VOUCH_CLIENT_SECRET are required")
-	}
 	if redirectURI == "" {
 		redirectURI = "http://localhost:3000/callback"
+	}
+
+	if clientID == "" || clientSecret == "" {
+		log.Fatal("VOUCH_CLIENT_ID and VOUCH_CLIENT_SECRET are required")
 	}
 
 	ctx := context.Background()

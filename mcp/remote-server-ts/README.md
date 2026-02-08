@@ -13,7 +13,7 @@ The server exposes a `whoami` tool that returns the authenticated user's email a
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VOUCH_ISSUER` | Yes | Your Vouch organization URL (e.g., `https://acme.vouch.sh`) |
+| `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_AUDIENCE` | No | Expected token audience (defaults to server URL) |
 
 ## Run
@@ -21,7 +21,7 @@ The server exposes a `whoami` tool that returns the authenticated user's email a
 ```bash
 docker build -t vouch-mcp-server .
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   vouch-mcp-server
 ```
 

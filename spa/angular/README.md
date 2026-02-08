@@ -17,7 +17,7 @@ Uses [angular-auth-oidc-client](https://github.com/damienbod/angular-auth-oidc-c
 ```bash
 docker build -t vouch-angular .
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   vouch-angular
 ```

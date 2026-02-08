@@ -5,7 +5,7 @@ export default NextAuth({
     id: 'vouch',
     name: 'Vouch',
     type: 'oauth',
-    wellKnown: `${process.env.VOUCH_ISSUER}/.well-known/openid-configuration`,
+    wellKnown: `${process.env.VOUCH_ISSUER || 'https://us.vouch.sh'}/.well-known/openid-configuration`,
     clientId: process.env.VOUCH_CLIENT_ID,
     clientSecret: process.env.VOUCH_CLIENT_SECRET,
     authorization: { params: { scope: 'openid email' } },

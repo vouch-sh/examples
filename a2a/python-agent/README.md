@@ -19,14 +19,14 @@ This example demonstrates:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VOUCH_ISSUER` | Yes | Your Vouch organization URL (e.g., `https://acme.vouch.sh`) |
+| `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 
 ## Run
 
 ```bash
 docker build -t vouch-a2a-agent .
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   vouch-a2a-agent
 ```
 
@@ -46,7 +46,7 @@ The agent card at `/.well-known/agent.json` includes:
   "securitySchemes": {
     "vouch_oidc": {
       "type": "openIdConnect",
-      "openIdConnectUrl": "https://your-org.vouch.sh/.well-known/openid-configuration"
+      "openIdConnectUrl": "https://us.vouch.sh/.well-known/openid-configuration"
     }
   },
   "security": [{ "vouch_oidc": [] }]

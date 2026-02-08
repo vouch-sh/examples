@@ -30,8 +30,7 @@ struct UserInfo {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let issuer = std::env::var("VOUCH_ISSUER")
-        .expect("VOUCH_ISSUER environment variable is required");
+    let issuer = std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string());
     let client_id = std::env::var("VOUCH_CLIENT_ID")
         .expect("VOUCH_CLIENT_ID environment variable is required");
 

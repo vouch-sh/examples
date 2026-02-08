@@ -72,7 +72,7 @@ docker build -t vouch-example .
 
 # Run with your credentials
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/callback \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
@@ -85,7 +85,7 @@ docker run -p 3000:3000 \
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VOUCH_ISSUER` | Yes | Your Vouch organization URL (e.g., `https://acme.vouch.sh`) |
+| `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | Yes | OAuth client ID from your Vouch application |
 | `VOUCH_CLIENT_SECRET` | Web only | OAuth client secret (not needed for SPA or native apps) |
 | `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL (e.g., `http://localhost:3000/callback`) |

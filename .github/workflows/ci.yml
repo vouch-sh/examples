@@ -1,0 +1,53 @@
+# CI: build each example via Docker to verify Dockerfiles and dependencies
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    name: Build example
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - directory: a2a/python-agent
+          - directory: mcp/remote-server-py
+          - directory: mcp/remote-server-ts
+          - directory: native/node
+          - directory: native/python
+          - directory: native/rust
+          - directory: spa/angular
+          - directory: spa/react
+          - directory: spa/sveltekit
+          - directory: spa/vanilla-js
+          - directory: spa/vue
+          - directory: web/aspnet-core
+          - directory: web/axum-openidconnect
+          - directory: web/django-allauth
+          - directory: web/express-passport
+          - directory: web/fastapi-authlib
+          - directory: web/flask-authlib
+          - directory: web/go-oidc
+          - directory: web/laravel-socialite
+          - directory: web/nextjs-nextauth
+          - directory: web/rails-omniauth
+          - directory: web/spring-boot
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build example image
+        env:
+          EXAMPLE_DIR: ${{ matrix.directory }}
+        run: |
+          docker build -t "vouch-example-${EXAMPLE_DIR}" .
+        working-directory: ${{ matrix.directory }}

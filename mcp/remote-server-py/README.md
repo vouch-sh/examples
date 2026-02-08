@@ -13,14 +13,14 @@ The server exposes a `whoami` tool that returns authenticated user information.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VOUCH_ISSUER` | Yes | Your Vouch organization URL (e.g., `https://acme.vouch.sh`) |
+| `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 
 ## Run
 
 ```bash
 docker build -t vouch-mcp-server-py .
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   vouch-mcp-server-py
 ```
 

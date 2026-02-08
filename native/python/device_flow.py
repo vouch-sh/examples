@@ -3,11 +3,11 @@ import sys
 import time
 import requests
 
-VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER')
+VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
 
-if not VOUCH_ISSUER or not CLIENT_ID:
-    print('Error: VOUCH_ISSUER and VOUCH_CLIENT_ID environment variables are required')
+if not CLIENT_ID:
+    print('Error: VOUCH_CLIENT_ID environment variable is required')
     sys.exit(1)
 
 # Step 1: Request device code

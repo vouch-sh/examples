@@ -1,8 +1,8 @@
-const VOUCH_ISSUER = process.env.VOUCH_ISSUER;
+const VOUCH_ISSUER = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const CLIENT_ID = process.env.VOUCH_CLIENT_ID;
 
-if (!VOUCH_ISSUER || !CLIENT_ID) {
-  console.error('Error: VOUCH_ISSUER and VOUCH_CLIENT_ID environment variables are required');
+if (!CLIENT_ID) {
+  console.error('Error: VOUCH_CLIENT_ID environment variable is required');
   process.exit(1);
 }
 

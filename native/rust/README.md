@@ -6,7 +6,7 @@ No client secret is needed. The user authenticates by visiting a URL in their br
 
 ## Environment Variables
 
-- `VOUCH_ISSUER` - The OIDC issuer URL
+- `VOUCH_ISSUER` - OIDC issuer URL (default: `https://us.vouch.sh`)
 - `VOUCH_CLIENT_ID` - The public client ID
 
 ## Run with Docker
@@ -14,7 +14,7 @@ No client secret is needed. The user authenticates by visiting a URL in their br
 ```bash
 docker build -t vouch-rust-device-flow .
 docker run -it \
-  -e VOUCH_ISSUER=https://your-issuer.example.com \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   vouch-rust-device-flow
 ```

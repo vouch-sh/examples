@@ -14,7 +14,7 @@ spring:
             redirect-uri: ${VOUCH_REDIRECT_URI:http://localhost:3000/login/oauth2/code/vouch}
         provider:
           vouch:
-            issuer-uri: ${VOUCH_ISSUER}
+            issuer-uri: ${VOUCH_ISSUER:https://us.vouch.sh}
   thymeleaf:
     prefix: classpath:/templates/
     suffix: .html

@@ -72,7 +72,7 @@ SOCIALACCOUNT_PROVIDERS = {
             'client_id': os.environ.get('VOUCH_CLIENT_ID', ''),
             'secret': os.environ.get('VOUCH_CLIENT_SECRET', ''),
             'settings': {
-                'server_url': os.environ.get('VOUCH_ISSUER', ''),
+                'server_url': os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh'),
             },
         }],
     },

@@ -8,7 +8,7 @@ This example demonstrates how to integrate Vouch OIDC authentication into an Exp
 
 | Variable | Description |
 |---|---|
-| `VOUCH_ISSUER` | The OIDC issuer URL |
+| `VOUCH_ISSUER` | OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | OAuth client secret |
 | `VOUCH_REDIRECT_URI` | OAuth redirect URI (default: `http://localhost:3000/auth/vouch/callback`) |
@@ -25,7 +25,7 @@ Run the container:
 
 ```bash
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-issuer.example.com \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/auth/vouch/callback \

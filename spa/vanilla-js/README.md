@@ -8,7 +8,7 @@ Single Page Application (Public Client) using OIDC with PKCE. No client secret n
 docker build -t vouch-vanilla-js-spa .
 
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-issuer.example.com \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/callback.html \
   vouch-vanilla-js-spa

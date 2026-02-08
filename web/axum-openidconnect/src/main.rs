@@ -26,7 +26,7 @@ struct AppState {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let issuer_url = IssuerUrl::new(
-        std::env::var("VOUCH_ISSUER").expect("VOUCH_ISSUER must be set"),
+        std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string()),
     )?;
 
     let provider_metadata =

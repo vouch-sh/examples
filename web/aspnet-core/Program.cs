@@ -1,16 +1,17 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Http;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var vouchIssuer = Environment.GetEnvironmentVariable("VOUCH_ISSUER")
-    ?? throw new InvalidOperationException("VOUCH_ISSUER is required");
+var vouchIssuer = Environment.GetEnvironmentVariable("VOUCH_ISSUER") ?? "https://us.vouch.sh";
 var clientId = Environment.GetEnvironmentVariable("VOUCH_CLIENT_ID")
     ?? throw new InvalidOperationException("VOUCH_CLIENT_ID is required");
 var clientSecret = Environment.GetEnvironmentVariable("VOUCH_CLIENT_SECRET")
     ?? throw new InvalidOperationException("VOUCH_CLIENT_SECRET is required");
+var redirectUri = Environment.GetEnvironmentVariable("VOUCH_REDIRECT_URI") ?? "http://localhost:3000/callback";
 
 builder.Services.AddAuthentication(options =>
 {
@@ -29,7 +30,15 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("email");
     options.SaveTokens = true;
     options.GetClaimsFromUserInfoEndpoint = true;
-    options.CallbackPath = "/callback";
+    options.CallbackPath = new PathString(new Uri(redirectUri).AbsolutePath);
+    options.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
+    {
+        OnRedirectToIdentityProvider = context =>
+        {
+            context.ProtocolMessage.RedirectUri = redirectUri;
+            return System.Threading.Tasks.Task.CompletedTask;
+        },
+    };
 
     options.ClaimActions.MapJsonKey("hardware_verified", "hardware_verified");
     options.ClaimActions.MapJsonKey("hardware_aaguid", "hardware_aaguid");

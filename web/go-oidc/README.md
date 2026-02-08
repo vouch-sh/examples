@@ -8,7 +8,7 @@ Uses [coreos/go-oidc](https://github.com/coreos/go-oidc) for OIDC discovery and 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VOUCH_ISSUER` | Yes | Your Vouch organization URL |
+| `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | Yes | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Yes | OAuth client secret |
 | `VOUCH_REDIRECT_URI` | No | Callback URL (default: `http://localhost:3000/callback`) |
@@ -18,7 +18,7 @@ Uses [coreos/go-oidc](https://github.com/coreos/go-oidc) for OIDC discovery and 
 ```bash
 docker build -t vouch-go .
 docker run -p 3000:3000 \
-  -e VOUCH_ISSUER=https://your-org.vouch.sh \
+  -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
   vouch-go

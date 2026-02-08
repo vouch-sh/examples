@@ -15,10 +15,10 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 passport.use('vouch', new OpenIDConnectStrategy({
-  issuer: process.env.VOUCH_ISSUER,
-  authorizationURL: `${process.env.VOUCH_ISSUER}/oauth/authorize`,
-  tokenURL: `${process.env.VOUCH_ISSUER}/oauth/token`,
-  userInfoURL: `${process.env.VOUCH_ISSUER}/oauth/userinfo`,
+  issuer: process.env.VOUCH_ISSUER || 'https://us.vouch.sh',
+  authorizationURL: `${process.env.VOUCH_ISSUER || 'https://us.vouch.sh'}/oauth/authorize`,
+  tokenURL: `${process.env.VOUCH_ISSUER || 'https://us.vouch.sh'}/oauth/token`,
+  userInfoURL: `${process.env.VOUCH_ISSUER || 'https://us.vouch.sh'}/oauth/userinfo`,
   clientID: process.env.VOUCH_CLIENT_ID,
   clientSecret: process.env.VOUCH_CLIENT_SECRET,
   callbackURL: process.env.VOUCH_REDIRECT_URI || 'http://localhost:3000/auth/vouch/callback',
