@@ -1,4 +1,4 @@
-a2a-python>=0.2
+a2a-sdk>=0.2.0
 uvicorn>=0.40
 PyJWT>=2.11
 cryptography>=46.0

@@ -35,13 +35,13 @@ class AuthController extends Controller
     public function redirect()
     {
         $config = new Config(
-            config('services.vouch.client_id'),
-            config('services.vouch.client_secret'),
-            config('services.vouch.redirect'),
-            ['base_url' => config('services.vouch.base_url')]
+            config('services.oidc.client_id'),
+            config('services.oidc.client_secret'),
+            config('services.oidc.redirect'),
+            ['base_url' => config('services.oidc.base_url')]
         );
 
-        return Socialite::driver('openid-connect')
+        return Socialite::driver('oidc')
             ->setConfig($config)
             ->scopes(['openid', 'email'])
             ->redirect();
@@ -49,7 +49,7 @@ class AuthController extends Controller
 
     public function callback(Request $request)
     {
-        $vouchUser = Socialite::driver('openid-connect')->user();
+        $vouchUser = Socialite::driver('oidc')->user();
 
         $request->session()->put('user', [
             'email' => $vouchUser->email,

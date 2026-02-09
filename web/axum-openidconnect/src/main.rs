@@ -5,20 +5,64 @@ use axum::{
     Router,
 };
 use openidconnect::{
-    core::{CoreClient, CoreProviderMetadata},
-    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
-    TokenResponse,
+    core::{
+        CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim,
+        CoreJsonWebKey, CoreJsonWebKeyType, CoreJsonWebKeyUse,
+        CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
+        CoreResponseType, CoreRevocableToken, CoreTokenType,
+    },
+    AdditionalClaims, AuthenticationFlow, AuthorizationCode, Client, ClientId, ClientSecret,
+    CsrfToken, EmptyExtraTokenFields, IdTokenFields, IssuerUrl, Nonce, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, RevocationErrorResponseType, Scope, StandardErrorResponse,
+    StandardTokenIntrospectionResponse, StandardTokenResponse, TokenResponse,
     reqwest::async_http_client,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_sessions::{MemoryStore, Session, SessionManagerLayer};
 
+// Custom additional claims to capture Vouch-specific fields from the ID token.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct VouchClaims {
+    #[serde(default)]
+    hardware_verified: Option<bool>,
+    #[serde(default)]
+    hardware_aaguid: Option<String>,
+}
+
+impl AdditionalClaims for VouchClaims {}
+
+type VouchIdTokenFields = IdTokenFields<
+    VouchClaims,
+    EmptyExtraTokenFields,
+    CoreGenderClaim,
+    CoreJweContentEncryptionAlgorithm,
+    CoreJwsSigningAlgorithm,
+    CoreJsonWebKeyType,
+>;
+
+type VouchClient = Client<
+    VouchClaims,
+    CoreAuthDisplay,
+    CoreGenderClaim,
+    CoreJweContentEncryptionAlgorithm,
+    CoreJwsSigningAlgorithm,
+    CoreJsonWebKeyType,
+    CoreJsonWebKeyUse,
+    CoreJsonWebKey,
+    CoreAuthPrompt,
+    StandardErrorResponse<CoreErrorResponseType>,
+    StandardTokenResponse<VouchIdTokenFields, CoreTokenType>,
+    CoreTokenType,
+    StandardTokenIntrospectionResponse<EmptyExtraTokenFields, CoreTokenType>,
+    CoreRevocableToken,
+    StandardErrorResponse<RevocationErrorResponseType>,
+>;
+
 #[derive(Clone)]
 struct AppState {
-    client: CoreClient,
+    client: VouchClient,
     // In production, use a proper session store
     pkce_verifiers: Arc<RwLock<std::collections::HashMap<String, (PkceCodeVerifier, Nonce)>>>,
 }
@@ -35,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let redirect_uri = std::env::var("VOUCH_REDIRECT_URI")
         .unwrap_or_else(|_| "http://localhost:3000/callback".to_string());
 
-    let client = CoreClient::from_provider_metadata(
+    let client = VouchClient::from_provider_metadata(
         provider_metadata,
         ClientId::new(std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID must be set")),
         Some(ClientSecret::new(
@@ -96,7 +140,7 @@ async fn login(State(state): State<AppState>) -> Redirect {
     let (auth_url, csrf_token, nonce) = state
         .client
         .authorize_url(
-            AuthenticationFlow::AuthorizationCode,
+            AuthenticationFlow::<CoreResponseType>::AuthorizationCode,
             CsrfToken::new_random,
             Nonce::new_random,
         )
@@ -155,8 +199,7 @@ async fn callback(
         .unwrap_or_default();
     let hardware_verified = claims
         .additional_claims()
-        .get("hardware_verified")
-        .and_then(|v| v.as_bool())
+        .hardware_verified
         .unwrap_or(false);
 
     let user = serde_json::json!({

@@ -8,7 +8,7 @@ class EventServiceProvider extends ServiceProvider
 {
     protected $listen = [
         \SocialiteProviders\Manager\SocialiteWasCalled::class => [
-            \SocialiteProviders\OpenIDConnect\OpenIDConnectExtendSocialite::class . '@handle',
+            \SocialiteProviders\OIDC\OIDCExtendSocialite::class . '@handle',
         ],
     ];
 }
