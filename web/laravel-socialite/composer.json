@@ -5,7 +5,7 @@
         "php": "^8.2",
         "laravel/framework": "^11.0",
         "laravel/socialite": "^5.0",
-        "kovah/laravel-socialite-oidc": "^1.0",
+        "kovah/laravel-socialite-oidc": "^0.6",
         "socialiteproviders/manager": "^4.0"
     },
     "autoload": {
