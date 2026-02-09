@@ -7,7 +7,7 @@ RUN mvn dependency:resolve --no-transfer-progress
 COPY src/ src/
 RUN mvn package -DskipTests --no-transfer-progress
 
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21-jre-noble
 
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
