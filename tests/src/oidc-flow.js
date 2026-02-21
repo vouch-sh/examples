@@ -101,6 +101,17 @@ async function handleAuthorize(page, opts) {
 async function handleDeviceFlow(page, verificationUrl, userCode, opts) {
   const timeout = opts?.timeout ?? 10_000;
 
+  // Strip Content-Security-Policy headers from device flow pages.
+  // Chromium headless sometimes blocks same-origin form POSTs due to
+  // CSP form-action 'self' enforcement quirks.
+  await page.route("**/*", async (route) => {
+    const response = await route.fetch();
+    const headers = { ...response.headers() };
+    delete headers["content-security-policy"];
+    delete headers["content-security-policy-report-only"];
+    await route.fulfill({ response, headers });
+  });
+
   await page.goto(verificationUrl);
 
   // Enter the user code
@@ -118,11 +129,13 @@ async function handleDeviceFlow(page, verificationUrl, userCode, opts) {
       'button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Continue")',
     )
     .first();
-  await submitButton.click();
 
-  // Handle consent if needed
-  await page.waitForLoadState("networkidle", { timeout });
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "load", timeout }),
+    submitButton.click(),
+  ]);
 
+  // Handle consent/authorize screen if needed
   const authorizeButton = page
     .locator(
       'button:has-text("Allow"), button:has-text("Authorize"), button:has-text("Approve"), input[type="submit"][value*="Allow"]',
@@ -131,20 +144,27 @@ async function handleDeviceFlow(page, verificationUrl, userCode, opts) {
 
   try {
     await authorizeButton.waitFor({ state: "visible", timeout: 3000 });
-    await authorizeButton.click();
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "load", timeout: 5000 }).catch(() => {}),
+      authorizeButton.click(),
+    ]);
   } catch {
     // No consent screen — authorization happened automatically
   }
+
+  // Remove the route interception
+  await page.unrouteAll();
 }
 
 /**
- * Obtain an access token by performing an Authorization Code flow via Playwright.
- * Used for MCP and A2A tests that need a Bearer token.
+ * Obtain a Bearer token by performing an Authorization Code flow via Playwright.
+ * Returns the ID token (JWT) since Vouch access tokens are opaque and
+ * cannot be verified by resource servers using JWKS. The ID token is a
+ * JWT signed by Vouch that resource servers can verify.
  *
  * @param {import("@playwright/test").BrowserContext} context
  * @param {{ clientId: string, clientSecret: string, redirectUri: string, issuer?: string }} opts
- * @returns {Promise<string>} access token
+ * @returns {Promise<string>} ID token (JWT)
  */
 async function obtainAccessToken(context, opts) {
   const issuer = opts.issuer || VOUCH_ISSUER_URL;
@@ -199,7 +219,9 @@ async function obtainAccessToken(context, opts) {
     }
 
     const tokens = await tokenRes.json();
-    return tokens.access_token;
+    // Return the ID token (ES256 JWT) since MCP/A2A servers verify tokens
+    // via JWKS. The access token is HS256-signed and not verifiable via JWKS.
+    return tokens.id_token || tokens.access_token;
   } finally {
     await page.close();
   }

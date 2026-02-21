@@ -23,7 +23,7 @@ struct ErrorResponse {
 }
 
 #[derive(Deserialize)]
-struct UserInfo {
+struct UserInfoResponse {
     email: Option<String>,
     hardware_verified: Option<bool>,
 }
@@ -71,16 +71,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Access token: {}...", &tokens.access_token[..20.min(tokens.access_token.len())]);
 
             // Fetch user info
-            let userinfo: UserInfo = client
+            let userinfo_response = client
                 .get(format!("{issuer}/oauth/userinfo"))
                 .bearer_auth(&tokens.access_token)
                 .send()
-                .await?
-                .json()
                 .await?;
 
-            println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
-            println!("Hardware verified: {}", userinfo.hardware_verified.unwrap_or(false));
+            if userinfo_response.status().is_success() {
+                let userinfo: UserInfoResponse = userinfo_response.json().await?;
+                println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
+                println!("Hardware verified: {}", userinfo.hardware_verified.unwrap_or(false));
+            } else {
+                println!("Email: N/A");
+                println!("Hardware verified: false");
+            }
             return Ok(());
         }
 

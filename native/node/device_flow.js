@@ -49,13 +49,18 @@ async function deviceFlow() {
       console.log(`Access token: ${tokens.access_token.slice(0, 20)}...`);
 
       // Fetch user info
-      const userinfoResponse = await fetch(`${VOUCH_ISSUER}/oauth/userinfo`, {
+      const userInfoResponse = await fetch(`${VOUCH_ISSUER}/oauth/userinfo`, {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
-      const userinfo = await userinfoResponse.json();
 
-      console.log(`Email: ${userinfo.email || 'N/A'}`);
-      console.log(`Hardware verified: ${userinfo.hardware_verified || false}`);
+      if (userInfoResponse.ok) {
+        const userInfo = await userInfoResponse.json();
+        console.log(`Email: ${userInfo.email || 'N/A'}`);
+        console.log(`Hardware verified: ${userInfo.hardware_verified || false}`);
+      } else {
+        console.log('Email: N/A');
+        console.log('Hardware verified: false');
+      }
       return;
     }
 

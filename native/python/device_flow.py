@@ -45,13 +45,17 @@ while True:
         print(f"Access token: {tokens['access_token'][:20]}...")
 
         # Fetch user info
-        userinfo = requests.get(
+        userinfo_response = requests.get(
             f'{VOUCH_ISSUER}/oauth/userinfo',
-            headers={'Authorization': f"Bearer {tokens['access_token']}"},
-        ).json()
-
-        print(f"Email: {userinfo.get('email', 'N/A')}")
-        print(f"Hardware verified: {userinfo.get('hardware_verified', False)}")
+            headers={'Authorization': f'Bearer {tokens["access_token"]}'},
+        )
+        if userinfo_response.status_code == 200:
+            userinfo = userinfo_response.json()
+            print(f"Email: {userinfo.get('email', 'N/A')}")
+            print(f"Hardware verified: {userinfo.get('hardware_verified', False)}")
+        else:
+            print("Email: N/A")
+            print("Hardware verified: False")
         break
 
     error = token_response.json().get('error')

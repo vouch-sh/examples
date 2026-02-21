@@ -65,6 +65,8 @@ agent_card = AgentCard(
     description='An A2A agent secured with Vouch OIDC. Demonstrates hardware-backed authentication for agent-to-agent communication.',
     url=f'http://localhost:{PORT}',
     version='1.0.0',
+    defaultInputModes=['text/plain'],
+    defaultOutputModes=['text/plain'],
     capabilities=AgentCapabilities(streaming=False),
     skills=[
         AgentSkill(

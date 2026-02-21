@@ -110,6 +110,7 @@ app.post('/mcp', verifyToken, async (req, res) => {
   } else {
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
     });
     const server = createMcpServer((req as any).auth);
     await server.connect(transport);
@@ -118,12 +119,15 @@ app.post('/mcp', verifyToken, async (req, res) => {
         transports.delete(transport.sessionId);
       }
     };
-    if (transport.sessionId) {
-      transports.set(transport.sessionId, transport);
-    }
   }
 
   await transport.handleRequest(req, res, req.body);
+
+  // Store transport after handleRequest — the sessionId is generated
+  // during the first request, so it's only available after handleRequest.
+  if (transport.sessionId && !transports.has(transport.sessionId)) {
+    transports.set(transport.sessionId, transport);
+  }
 });
 
 // Handle GET for SSE stream (long-lived server-to-client channel)
