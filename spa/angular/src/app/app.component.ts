@@ -39,6 +39,11 @@ export class AppComponent implements OnInit {
         this.email = userData.email || '';
         this.hardwareVerified = userData.hardware_verified || false;
       }
+      // After processing the callback, redirect to home with a full page load
+      // so checkAuth() re-reads stored tokens and updates the UI
+      if (window.location.pathname === '/callback') {
+        window.location.href = '/';
+      }
     });
   }
 
@@ -47,6 +52,9 @@ export class AppComponent implements OnInit {
   }
 
   logout() {
-    this.oidc.logoff().subscribe();
+    this.oidc.logoffLocal();
+    this.isAuthenticated = false;
+    this.email = '';
+    this.hardwareVerified = false;
   }
 }

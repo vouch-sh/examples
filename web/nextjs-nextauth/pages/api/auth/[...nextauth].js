@@ -10,6 +10,7 @@ export default NextAuth({
     clientSecret: process.env.VOUCH_CLIENT_SECRET,
     authorization: { params: { scope: 'openid email' } },
     idToken: true,
+    client: { id_token_signed_response_alg: 'ES256' },
     profile(profile) {
       return {
         id: profile.sub,

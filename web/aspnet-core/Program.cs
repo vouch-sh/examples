@@ -29,7 +29,7 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("openid");
     options.Scope.Add("email");
     options.SaveTokens = true;
-    options.GetClaimsFromUserInfoEndpoint = true;
+    options.GetClaimsFromUserInfoEndpoint = false;
     options.CallbackPath = new PathString(new Uri(redirectUri).AbsolutePath);
     options.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
     {
@@ -43,6 +43,8 @@ builder.Services.AddAuthentication(options =>
     options.ClaimActions.MapJsonKey("hardware_verified", "hardware_verified");
     options.ClaimActions.MapJsonKey("hardware_aaguid", "hardware_aaguid");
 });
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 

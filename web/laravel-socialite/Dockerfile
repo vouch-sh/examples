@@ -14,8 +14,9 @@ RUN composer install --no-dev --no-scripts
 COPY . .
 RUN composer dump-autoload
 
-RUN php artisan key:generate --force 2>/dev/null || true
+RUN cp .env.example .env && php artisan key:generate --force
 RUN touch database/database.sqlite
 
 EXPOSE 3000
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=3000"]
+RUN echo "variables_order = EGPCS" > /usr/local/etc/php/conf.d/env.ini
+CMD ["php", "-S", "0.0.0.0:3000", "-t", "public"]

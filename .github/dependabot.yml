@@ -18,6 +18,7 @@ multi-ecosystem-groups:
           - "/spa/sveltekit"
           - "/spa/vanilla-js"
           - "/spa/vue"
+          - "/tests"
           - "/web/express-passport"
           - "/web/nextjs-nextauth"
         patterns: ["*"]

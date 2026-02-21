@@ -65,7 +65,6 @@ AUTHENTICATION_BACKENDS = [
 
 SOCIALACCOUNT_PROVIDERS = {
     'openid_connect': {
-        'OAUTH_PKCE_ENABLED': True,
         'APPS': [{
             'provider_id': 'vouch',
             'name': 'Vouch',
@@ -73,6 +72,7 @@ SOCIALACCOUNT_PROVIDERS = {
             'secret': os.environ.get('VOUCH_CLIENT_SECRET', ''),
             'settings': {
                 'server_url': os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh'),
+                'fetch_userinfo': False,
             },
         }],
     },
@@ -81,3 +81,4 @@ SOCIALACCOUNT_PROVIDERS = {
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 STATIC_URL = 'static/'
+

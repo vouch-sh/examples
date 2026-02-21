@@ -1,0 +1,17 @@
+{
+  "name": "vouch-examples-tests",
+  "private": true,
+  "description": "End-to-end tests for vouch-examples using Playwright",
+  "scripts": {
+    "test": "playwright test",
+    "test:web": "playwright test tests/web.spec.js",
+    "test:spa": "playwright test tests/spa.spec.js",
+    "test:native": "playwright test tests/native.spec.js",
+    "test:mcp": "playwright test tests/mcp.spec.js",
+    "test:a2a": "playwright test tests/a2a.spec.js",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

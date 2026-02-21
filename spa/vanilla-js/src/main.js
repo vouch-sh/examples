@@ -21,7 +21,7 @@ async function checkAuth() {
       <button id="logout-btn">Sign out</button>
     `;
     document.getElementById('logout-btn').addEventListener('click', () => {
-      userManager.signoutRedirect();
+      userManager.removeUser().then(() => checkAuth());
     });
   } else {
     el.innerHTML = '<button id="login-btn">Sign in with Vouch</button>';

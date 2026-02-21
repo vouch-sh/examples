@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite;
 use SocialiteProviders\Manager\Config;
 
-class AuthController extends Controller
+class AuthController extends \Illuminate\Routing\Controller
 {
     public function home(Request $request)
     {

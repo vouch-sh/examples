@@ -10,7 +10,7 @@
       <button type="submit">Sign out</button>
     </form>
   {% else %}
-    <a href="{% url 'openid_connect_login' %}?process=login&provider_id=vouch">Sign in with Vouch</a>
+    <a href="{% url 'openid_connect_login' provider_id='vouch' %}?process=login">Sign in with Vouch</a>
   {% endif %}
 </body>
 </html>

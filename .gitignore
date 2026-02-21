@@ -22,3 +22,5 @@ Thumbs.db
 # Build artifacts
 dist/
 .next/
+tests/playwright-report/
+tests/test-results/

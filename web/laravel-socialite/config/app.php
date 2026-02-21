@@ -23,6 +23,7 @@ return [
         Illuminate\View\ViewServiceProvider::class,
         Illuminate\Routing\RoutingServiceProvider::class,
         SocialiteProviders\Manager\ServiceProvider::class,
+        App\Providers\EventServiceProvider::class,
     ],
     'aliases' => [
         'Socialite' => Laravel\Socialite\Facades\Socialite::class,

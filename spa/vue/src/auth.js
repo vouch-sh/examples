@@ -20,7 +20,8 @@ export async function login() {
 }
 
 export async function logout() {
-  return await userManager.signoutRedirect();
+  await userManager.removeUser();
+  window.location.href = '/';
 }
 
 export async function handleCallback() {
