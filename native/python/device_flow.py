@@ -10,6 +10,17 @@ if not CLIENT_ID:
     print('Error: VOUCH_CLIENT_ID environment variable is required')
     sys.exit(1)
 
+
+def fetch_userinfo(access_token):
+    resp = requests.get(
+        f'{VOUCH_ISSUER}/oauth/userinfo',
+        headers={'Authorization': f'Bearer {access_token}'},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 # Step 1: Request device code
 response = requests.post(
     f'{VOUCH_ISSUER}/oauth/device',
@@ -41,21 +52,21 @@ while True:
 
     if token_response.status_code == 200:
         tokens = token_response.json()
-        print(f"Authenticated!")
+        print("Authenticated!")
         print(f"Access token: {tokens['access_token'][:20]}...")
 
-        # Fetch user info
-        userinfo_response = requests.get(
-            f'{VOUCH_ISSUER}/oauth/userinfo',
-            headers={'Authorization': f'Bearer {tokens["access_token"]}'},
-        )
-        if userinfo_response.status_code == 200:
-            userinfo = userinfo_response.json()
-            print(f"Email: {userinfo.get('email', 'N/A')}")
-            print(f"Hardware verified: {userinfo.get('hardware_verified', False)}")
-        else:
-            print("Email: N/A")
-            print("Hardware verified: False")
+        # Step 4: Fetch user info
+        userinfo = fetch_userinfo(tokens['access_token'])
+        print(f"Email: {userinfo.get('email', 'N/A')}")
+        print(f"Hardware verified: {userinfo.get('hardware_verified', False)}")
+        if userinfo.get('hardware_aaguid'):
+            print(f"Hardware AAGUID: {userinfo['hardware_aaguid']}")
+
+        # Step 5: Demonstrate post-auth API call with the access token
+        print("\n--- Post-auth API call ---")
+        userinfo2 = fetch_userinfo(tokens['access_token'])
+        print(f"Second userinfo call succeeded: {userinfo2.get('email')}")
+
         break
 
     error = token_response.json().get('error')

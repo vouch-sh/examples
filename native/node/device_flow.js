@@ -6,6 +6,16 @@ if (!CLIENT_ID) {
   process.exit(1);
 }
 
+async function fetchUserInfo(accessToken) {
+  const response = await fetch(`${VOUCH_ISSUER}/oauth/userinfo`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(`UserInfo request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 async function deviceFlow() {
   // Step 1: Request device code
   const deviceResponse = await fetch(`${VOUCH_ISSUER}/oauth/device`, {
@@ -48,19 +58,19 @@ async function deviceFlow() {
       console.log('Authenticated!');
       console.log(`Access token: ${tokens.access_token.slice(0, 20)}...`);
 
-      // Fetch user info
-      const userInfoResponse = await fetch(`${VOUCH_ISSUER}/oauth/userinfo`, {
-        headers: { Authorization: `Bearer ${tokens.access_token}` },
-      });
-
-      if (userInfoResponse.ok) {
-        const userInfo = await userInfoResponse.json();
-        console.log(`Email: ${userInfo.email || 'N/A'}`);
-        console.log(`Hardware verified: ${userInfo.hardware_verified || false}`);
-      } else {
-        console.log('Email: N/A');
-        console.log('Hardware verified: false');
+      // Step 4: Fetch user info
+      const userInfo = await fetchUserInfo(tokens.access_token);
+      console.log(`Email: ${userInfo.email || 'N/A'}`);
+      console.log(`Hardware verified: ${userInfo.hardware_verified || false}`);
+      if (userInfo.hardware_aaguid) {
+        console.log(`Hardware AAGUID: ${userInfo.hardware_aaguid}`);
       }
+
+      // Step 5: Demonstrate post-auth API call with the access token
+      console.log('\n--- Post-auth API call ---');
+      const userInfo2 = await fetchUserInfo(tokens.access_token);
+      console.log(`Second userinfo call succeeded: ${userInfo2.email}`);
+
       return;
     }
 

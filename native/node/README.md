@@ -18,3 +18,8 @@ docker run -it \
   -e VOUCH_CLIENT_ID=your-client-id \
   vouch-node-device-flow
 ```
+
+## Advanced Features
+
+- **UserInfo + profile enrichment** — Fetches and displays `email`, `hardware_verified`, and `hardware_aaguid` from the UserInfo endpoint
+- **Post-auth API call** — Makes a second UserInfo call to demonstrate using the access token for subsequent API requests

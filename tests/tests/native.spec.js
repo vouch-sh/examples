@@ -88,6 +88,10 @@ for (const example of NATIVE_EXAMPLES) {
     // (fresh login) even when a valid __Host-vouch_session cookie is present.
     // This is a security feature — the device flow is designed to prove
     // user presence on a separate trusted device.
+    //
+    // If the flow could complete, stdout would also contain:
+    //   "--- Post-auth API call ---"
+    //   "Second userinfo call succeeded: <email>"
     test.skip("device authorization flow (requires interactive Google login)", async () => {});
   });
 }

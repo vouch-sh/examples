@@ -260,5 +260,91 @@ for (const example of MCP_EXAMPLES) {
       const content = JSON.stringify(toolBody.result);
       expect(content).toMatch(/@/); // should contain an email address
     });
+
+    test("sensitive-action tool enforces hardware verification", async ({
+      browser,
+    }) => {
+      // Reuse existing token if available, otherwise obtain one
+      if (!accessToken) {
+        tokenApp = await createApp(creds, {
+          name: `${APP_PREFIX}token-${example.name}`,
+          applicationType: "web",
+          redirectUris: [callbackUrl],
+        });
+
+        const context = await browser.newContext();
+        await setupContext(context, cookie);
+
+        accessToken = await obtainAccessToken(context, {
+          clientId: tokenApp.client_id,
+          clientSecret: tokenApp.client_secret,
+          redirectUri: callbackUrl,
+        });
+
+        await context.close();
+      }
+
+      // Initialize the MCP session
+      const initRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          ...MCP_HEADERS,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test", version: "1.0" },
+          },
+        }),
+      });
+
+      expect(initRes.status).toBe(200);
+
+      const sessionId = initRes.headers.get("mcp-session-id");
+      const headers = {
+        ...MCP_HEADERS,
+        Authorization: `Bearer ${accessToken}`,
+      };
+      if (sessionId) {
+        headers["mcp-session-id"] = sessionId;
+      }
+
+      // Send initialized notification
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+        }),
+      });
+
+      // Call the sensitive-action tool
+      const toolRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "sensitive-action",
+            arguments: {},
+          },
+        }),
+      });
+
+      expect(toolRes.status).toBe(200);
+      const toolBody = await parseMcpResponse(toolRes);
+      expect(toolBody).toHaveProperty("result");
+      // Vouch sessions are hardware verified, so this should succeed
+      const content = JSON.stringify(toolBody.result);
+      expect(content).toContain("hardware_verified");
+    });
   });
 }

@@ -29,3 +29,7 @@ docker run -p 3000:3000 \
 ```
 http://localhost:3000/callback
 ```
+
+## Advanced Features
+
+- **`/userinfo`** — Calls the Vouch UserInfo endpoint with the stored access token and displays the full response

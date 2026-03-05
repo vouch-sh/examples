@@ -17,10 +17,18 @@ app.use(session({
   saveUninitialized: false,
 }));
 
+function requireAuth(req, res, next) {
+  if (!req.session.user) {
+    return res.status(401).send('Not authenticated. <a href="/">Go home</a>');
+  }
+  next();
+}
+
 app.get('/', (req, res) => {
   if (req.session.user) {
     const hw = req.session.user.hardwareVerified
-      ? '<p><strong>Hardware Verified</strong></p>'
+      ? `<p><strong>Hardware Verified</strong></p>
+         <p>AAGUID: ${req.session.user.hardwareAaguid || 'N/A'}</p>`
       : '';
     res.send(`
       <!DOCTYPE html>
@@ -30,6 +38,11 @@ app.get('/', (req, res) => {
         <h1>Vouch OIDC + Express</h1>
         <p>Signed in as ${req.session.user.email}</p>
         ${hw}
+        <ul>
+          <li><a href="/userinfo">UserInfo</a></li>
+          <li><a href="/protected">Protected Route</a></li>
+          <li><a href="/introspect">Introspect Token</a></li>
+        </ul>
         <a href="/logout">Sign out</a>
       </body>
       </html>
@@ -85,11 +98,119 @@ app.get('/auth/vouch/callback', async (req, res) => {
       id: claims.sub,
       email: claims.email,
       hardwareVerified: claims.hardware_verified || false,
+      hardwareAaguid: claims.hardware_aaguid || null,
+    };
+
+    req.session.tokens = {
+      accessToken: tokens.access_token,
+      expiresAt: tokens.expires_in
+        ? Date.now() + tokens.expires_in * 1000
+        : null,
     };
 
     res.redirect('/');
   } catch (err) {
     console.error('Callback error:', err);
+    res.status(500).send(err.message);
+  }
+});
+
+app.get('/protected', requireAuth, (req, res) => {
+  const { hardwareVerified, hardwareAaguid, email } = req.session.user;
+  if (!hardwareVerified) {
+    res.status(403).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Access Denied</title></head>
+      <body>
+        <h1>Access Denied</h1>
+        <p>This route requires hardware key verification.</p>
+        <p><code>hardware_verified</code> is <strong>false</strong> for your session.</p>
+        <a href="/">Back</a>
+      </body>
+      </html>
+    `);
+    return;
+  }
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head><title>Protected</title></head>
+    <body>
+      <h1>Protected Route</h1>
+      <p>Signed in as ${email}</p>
+      <p><strong>Hardware Verified</strong></p>
+      <p>AAGUID: ${hardwareAaguid || 'N/A'}</p>
+      <a href="/">Back</a>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/userinfo', requireAuth, async (req, res) => {
+  try {
+    const { accessToken } = req.session.tokens;
+    const response = await fetch(`${issuer}/oauth/userinfo`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      res.status(response.status).send(`UserInfo request failed: ${response.status}`);
+      return;
+    }
+    const userinfo = await response.json();
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>UserInfo</title></head>
+      <body>
+        <h1>UserInfo Response</h1>
+        <pre>${JSON.stringify(userinfo, null, 2)}</pre>
+        <a href="/">Back</a>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('UserInfo error:', err);
+    res.status(500).send(err.message);
+  }
+});
+
+app.get('/introspect', requireAuth, async (req, res) => {
+  try {
+    const { accessToken } = req.session.tokens;
+    const params = new URLSearchParams({
+      token: accessToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    const response = await fetch(`${issuer}/oauth/introspect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params,
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      res.status(response.status).send(`Introspection failed: ${body}`);
+      return;
+    }
+
+    const result = await response.json();
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Token Introspection</title></head>
+      <body>
+        <h1>Token Introspection</h1>
+        <p>Active: <strong>${result.active}</strong></p>
+        <pre>${JSON.stringify(result, null, 2)}</pre>
+        <a href="/">Back</a>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('Introspection error:', err);
     res.status(500).send(err.message);
   }
 });

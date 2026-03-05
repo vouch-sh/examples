@@ -1,4 +1,53 @@
 import { useAuth } from 'react-oidc-context';
+import { useState, useEffect } from 'react';
+
+function TokenInfo({ auth }) {
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  useEffect(() => {
+    if (!auth.user?.expires_at) return;
+
+    function update() {
+      const seconds = auth.user.expires_at - Math.floor(Date.now() / 1000);
+      setTimeLeft(seconds > 0 ? seconds : 0);
+    }
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [auth.user?.expires_at]);
+
+  if (timeLeft === null) return null;
+
+  return (
+    <div style={{ marginTop: '1rem', padding: '1rem', background: '#f5f5f5', borderRadius: '4px' }}>
+      <h3>Token Info</h3>
+      <p>Token expires in: <strong>{timeLeft}s</strong></p>
+    </div>
+  );
+}
+
+function UserProfile({ auth }) {
+  const profile = auth.user?.profile;
+  if (!profile) return null;
+
+  return (
+    <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f8ff', borderRadius: '4px' }}>
+      <h3>Profile Claims</h3>
+      <ul style={{ listStyle: 'none', padding: 0 }}>
+        <li><strong>sub:</strong> {profile.sub}</li>
+        <li><strong>email:</strong> {profile.email}</li>
+        {profile.email_verified !== undefined && (
+          <li><strong>email_verified:</strong> {String(profile.email_verified)}</li>
+        )}
+        <li><strong>hardware_verified:</strong> {String(profile.hardware_verified || false)}</li>
+        {profile.hardware_aaguid && (
+          <li><strong>hardware_aaguid:</strong> {profile.hardware_aaguid}</li>
+        )}
+      </ul>
+    </div>
+  );
+}
 
 export default function App() {
   const auth = useAuth();
@@ -30,7 +79,11 @@ export default function App() {
           {auth.user?.profile.hardware_verified && (
             <p><strong>Hardware Verified</strong></p>
           )}
-          <button onClick={() => auth.removeUser()}>Sign out</button>
+          <UserProfile auth={auth} />
+          <TokenInfo auth={auth} />
+          <div style={{ marginTop: '1rem' }}>
+            <button onClick={() => auth.removeUser()}>Sign out</button>
+          </div>
         </div>
       ) : (
         <button onClick={() => auth.signinRedirect()}>Sign in with Vouch</button>
