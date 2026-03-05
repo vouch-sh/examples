@@ -12,6 +12,7 @@ oauth.register(
     client_secret=os.environ.get('VOUCH_CLIENT_SECRET'),
     server_metadata_url=f"{os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')}/.well-known/openid-configuration",
     client_kwargs={'scope': 'openid email'},
+    code_challenge_method='S256',
 )
 
 TEMPLATE = """

@@ -1,8 +1,8 @@
-# Express + Passport OpenID Connect
+# Express + openid-client
 
 **Integration type:** Web Application (Confidential Client)
 
-This example demonstrates how to integrate Vouch OIDC authentication into an Express application using Passport.
+This example demonstrates how to integrate Vouch OIDC authentication into an Express application using [openid-client](https://github.com/panva/openid-client) with PKCE.
 
 ## Environment Variables
 
@@ -18,7 +18,7 @@ This example demonstrates how to integrate Vouch OIDC authentication into an Exp
 Build the image:
 
 ```bash
-docker build -t vouch-express-passport .
+docker build -t vouch-express-openid .
 ```
 
 Run the container:
@@ -29,7 +29,7 @@ docker run -p 3000:3000 \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/auth/vouch/callback \
-  vouch-express-passport
+  vouch-express-openid
 ```
 
 ## Callback URL

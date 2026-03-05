@@ -15,7 +15,7 @@ bootstrapApplication(AppComponent, {
         postLogoutRedirectUri: typeof window !== 'undefined' ? window.location.origin : '',
         scope: 'openid email',
         responseType: 'code',
-        autoUserInfo: false,
+        autoUserInfo: true,
         logLevel: LogLevel.Warn,
       },
     }),

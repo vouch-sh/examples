@@ -7,8 +7,8 @@
 /** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string }>} */
 const WEB_EXAMPLES = [
   {
-    name: "express-passport",
-    dir: "web/express-passport",
+    name: "express-openid",
+    dir: "web/express-openid",
     type: "web",
     loginSelector: 'a[href="/auth/vouch"]',
     logoutSelector: 'a[href="/logout"]',

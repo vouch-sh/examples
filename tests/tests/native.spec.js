@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { build, stop, runAttached, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, handleDeviceFlow } = require("../src/oidc-flow");
 const { NATIVE_EXAMPLES } = require("../src/examples");
@@ -7,10 +7,12 @@ const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
 
 let cookie;
+let creds;
 
 test.beforeAll(async () => {
   cookie = loadCookie();
-  await cleanupStaleApps(cookie, APP_PREFIX);
+  creds = { token: loadToken(), dpopKey: loadDpopKey() };
+  await cleanupStaleApps(creds, APP_PREFIX);
   cleanupStaleContainers();
 });
 
@@ -23,7 +25,7 @@ for (const example of NATIVE_EXAMPLES) {
 
     test.beforeAll(async () => {
       // Create Vouch OAuth app (native type)
-      app = await createApp(cookie, {
+      app = await createApp(creds, {
         name: appName,
         applicationType: "native",
         redirectUris: ["http://localhost/callback"], // placeholder for native
@@ -36,7 +38,7 @@ for (const example of NATIVE_EXAMPLES) {
     test.afterAll(async () => {
       stop(containerName);
       if (app) {
-        await deleteApp(cookie, app.id);
+        await deleteApp(creds, app.id);
       }
     });
 
@@ -83,7 +85,7 @@ for (const example of NATIVE_EXAMPLES) {
 
     // Full device authorization flow cannot be automated because
     // the Vouch device verification page requires Google re-authentication
-    // (fresh login) even when a valid vouch_session cookie is present.
+    // (fresh login) even when a valid __Host-vouch_session cookie is present.
     // This is a security feature — the device flow is designed to prove
     // user presence on a separate trusted device.
     test.skip("device authorization flow (requires interactive Google login)", async () => {});

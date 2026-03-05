@@ -19,7 +19,7 @@ multi-ecosystem-groups:
           - "/spa/vanilla-js"
           - "/spa/vue"
           - "/tests"
-          - "/web/express-passport"
+          - "/web/express-openid"
           - "/web/nextjs-nextauth"
         patterns: ["*"]
         multi-ecosystem-group: "all"
@@ -51,7 +51,7 @@ multi-ecosystem-groups:
           - "/web/aspnet-core"
           - "/web/axum-openidconnect"
           - "/web/django-allauth"
-          - "/web/express-passport"
+          - "/web/express-openid"
           - "/web/fastapi-authlib"
           - "/web/flask-authlib"
           - "/web/go-oidc"

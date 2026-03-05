@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, obtainAccessToken } = require("../src/oidc-flow");
 const { A2A_EXAMPLES } = require("../src/examples");
@@ -7,10 +7,12 @@ const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
 
 let cookie;
+let creds;
 
 test.beforeAll(async () => {
   cookie = loadCookie();
-  await cleanupStaleApps(cookie, APP_PREFIX);
+  creds = { token: loadToken(), dpopKey: loadDpopKey() };
+  await cleanupStaleApps(creds, APP_PREFIX);
   cleanupStaleContainers();
 });
 
@@ -32,7 +34,7 @@ for (const example of A2A_EXAMPLES) {
       callbackUrl = `${baseUrl}/callback`;
 
       // Create the A2A server's Vouch app
-      a2aApp = await createApp(cookie, {
+      a2aApp = await createApp(creds, {
         name: appName,
         applicationType: "web",
         redirectUris: [callbackUrl],
@@ -58,10 +60,10 @@ for (const example of A2A_EXAMPLES) {
     test.afterAll(async () => {
       stop(containerName);
       if (a2aApp) {
-        await deleteApp(cookie, a2aApp.id);
+        await deleteApp(creds, a2aApp.id);
       }
       if (tokenApp) {
-        await deleteApp(cookie, tokenApp.id);
+        await deleteApp(creds, tokenApp.id);
       }
     });
 
@@ -105,7 +107,7 @@ for (const example of A2A_EXAMPLES) {
 
     test("accepts valid bearer token", async ({ browser }) => {
       // Create a temporary web app to obtain an access token
-      tokenApp = await createApp(cookie, {
+      tokenApp = await createApp(creds, {
         name: `${APP_PREFIX}token-${example.name}`,
         applicationType: "web",
         redirectUris: [callbackUrl],

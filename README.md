@@ -18,7 +18,7 @@ Server-side applications that securely store a client secret. Uses the Authoriza
 |-----------|-----------|----------|
 | Rails + OmniAuth | [`web/rails-omniauth`](web/rails-omniauth) | Ruby |
 | Django + django-allauth | [`web/django-allauth`](web/django-allauth) | Python |
-| Express + Passport | [`web/express-passport`](web/express-passport) | Node.js |
+| Express + openid-client | [`web/express-openid`](web/express-openid) | Node.js |
 | Next.js + NextAuth | [`web/nextjs-nextauth`](web/nextjs-nextauth) | Node.js |
 | Laravel + Socialite | [`web/laravel-socialite`](web/laravel-socialite) | PHP |
 | Flask + Authlib | [`web/flask-authlib`](web/flask-authlib) | Python |

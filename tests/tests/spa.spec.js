@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, handleAuthorize } = require("../src/oidc-flow");
 const { SPA_EXAMPLES } = require("../src/examples");
@@ -7,10 +7,12 @@ const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
 
 let cookie;
+let creds;
 
 test.beforeAll(async () => {
   cookie = loadCookie();
-  await cleanupStaleApps(cookie, APP_PREFIX);
+  creds = { token: loadToken(), dpopKey: loadDpopKey() };
+  await cleanupStaleApps(creds, APP_PREFIX);
   cleanupStaleContainers();
 });
 
@@ -29,7 +31,7 @@ for (const example of SPA_EXAMPLES) {
       const redirectUri = `${baseUrl}/callback`;
 
       // Create Vouch OAuth app (SPA type — no client secret, uses PKCE)
-      app = await createApp(cookie, {
+      app = await createApp(creds, {
         name: appName,
         applicationType: "spa",
         redirectUris: [redirectUri],
@@ -54,7 +56,7 @@ for (const example of SPA_EXAMPLES) {
     test.afterAll(async () => {
       stop(containerName);
       if (app) {
-        await deleteApp(cookie, app.id);
+        await deleteApp(creds, app.id);
       }
     });
 
