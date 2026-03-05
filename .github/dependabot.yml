@@ -3,98 +3,100 @@
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+
 multi-ecosystem-groups:
   all:
     schedule:
       interval: "weekly"
       day: "monday"
-    updates:
-      - package-ecosystem: "npm"
-        directories:
-          - "/mcp/remote-server-ts"
-          - "/native/node"
-          - "/spa/angular"
-          - "/spa/react"
-          - "/spa/sveltekit"
-          - "/spa/vanilla-js"
-          - "/spa/vue"
-          - "/tests"
-          - "/web/express-openid"
-          - "/web/nextjs-nextauth"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
 
-      - package-ecosystem: "pip"
-        directories:
-          - "/a2a/python-agent"
-          - "/mcp/remote-server-py"
-          - "/native/python"
-          - "/web/django-allauth"
-          - "/web/fastapi-authlib"
-          - "/web/flask-authlib"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/mcp/remote-server-ts"
+      - "/native/node"
+      - "/spa/angular"
+      - "/spa/react"
+      - "/spa/sveltekit"
+      - "/spa/vanilla-js"
+      - "/spa/vue"
+      - "/tests"
+      - "/web/express-openid"
+      - "/web/nextjs-nextauth"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "docker"
-        directories:
-          - "/a2a/python-agent"
-          - "/mcp/remote-server-py"
-          - "/mcp/remote-server-ts"
-          - "/native/node"
-          - "/native/python"
-          - "/native/rust"
-          - "/spa/angular"
-          - "/spa/react"
-          - "/spa/sveltekit"
-          - "/spa/vanilla-js"
-          - "/spa/vue"
-          - "/web/aspnet-core"
-          - "/web/axum-openidconnect"
-          - "/web/django-allauth"
-          - "/web/express-openid"
-          - "/web/fastapi-authlib"
-          - "/web/flask-authlib"
-          - "/web/go-oidc"
-          - "/web/laravel-socialite"
-          - "/web/nextjs-nextauth"
-          - "/web/rails-omniauth"
-          - "/web/spring-boot"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "pip"
+    directories:
+      - "/a2a/python-agent"
+      - "/mcp/remote-server-py"
+      - "/native/python"
+      - "/web/django-allauth"
+      - "/web/fastapi-authlib"
+      - "/web/flask-authlib"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "gomod"
-        directories:
-          - "/web/go-oidc"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "docker"
+    directories:
+      - "/a2a/python-agent"
+      - "/mcp/remote-server-py"
+      - "/mcp/remote-server-ts"
+      - "/native/node"
+      - "/native/python"
+      - "/native/rust"
+      - "/spa/angular"
+      - "/spa/react"
+      - "/spa/sveltekit"
+      - "/spa/vanilla-js"
+      - "/spa/vue"
+      - "/web/aspnet-core"
+      - "/web/axum-openidconnect"
+      - "/web/django-allauth"
+      - "/web/express-openid"
+      - "/web/fastapi-authlib"
+      - "/web/flask-authlib"
+      - "/web/go-oidc"
+      - "/web/laravel-socialite"
+      - "/web/nextjs-nextauth"
+      - "/web/rails-omniauth"
+      - "/web/spring-boot"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "cargo"
-        directories:
-          - "/native/rust"
-          - "/web/axum-openidconnect"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "gomod"
+    directories:
+      - "/web/go-oidc"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "bundler"
-        directories:
-          - "/web/rails-omniauth"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "cargo"
+    directories:
+      - "/native/rust"
+      - "/web/axum-openidconnect"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "composer"
-        directories:
-          - "/web/laravel-socialite"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "bundler"
+    directories:
+      - "/web/rails-omniauth"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "maven"
-        directories:
-          - "/web/spring-boot"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "composer"
+    directories:
+      - "/web/laravel-socialite"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
 
-      - package-ecosystem: "nuget"
-        directories:
-          - "/web/aspnet-core"
-        patterns: ["*"]
-        multi-ecosystem-group: "all"
+  - package-ecosystem: "maven"
+    directories:
+      - "/web/spring-boot"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
+
+  - package-ecosystem: "nuget"
+    directories:
+      - "/web/aspnet-core"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"
