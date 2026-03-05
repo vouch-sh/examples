@@ -69,6 +69,26 @@ async def whoami() -> str:
     return json.dumps({'error': 'No authentication context'}, indent=2)
 
 
+@mcp.tool(name='sensitive-action')
+async def sensitive_action() -> str:
+    """Performs a sensitive action that requires hardware key verification."""
+    claims = _current_claims.get()
+    if not claims or not claims.get('hardware_verified', False):
+        return json.dumps({
+            'error': 'hardware_key_required',
+            'message': (
+                'This action requires hardware key verification. '
+                'Your session has hardware_verified=false.'
+            ),
+        }, indent=2)
+    return json.dumps({
+        'status': 'success',
+        'message': 'Sensitive action completed',
+        'hardware_verified': True,
+        'hardware_aaguid': claims.get('hardware_aaguid'),
+    }, indent=2)
+
+
 if __name__ == '__main__':
     print(f'MCP server running on http://localhost:{PORT}')
     print(f'Protected Resource Metadata: http://localhost:{PORT}/.well-known/oauth-protected-resource')
