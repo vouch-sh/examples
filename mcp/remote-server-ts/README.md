@@ -19,6 +19,8 @@ The server exposes tools demonstrating identity-aware MCP patterns:
 |----------|----------|-------------|
 | `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_AUDIENCE` | No | Expected token audience (defaults to server URL) |
+| `VOUCH_CLIENT_ID` | For introspection | OAuth client ID (required by `introspect-token` tool) |
+| `VOUCH_CLIENT_SECRET` | For introspection | OAuth client secret (required by `introspect-token` tool) |
 
 ## Run
 

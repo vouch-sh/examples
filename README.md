@@ -109,7 +109,7 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 
 | Pattern | Examples |
 |---------|----------|
-| Hardware key enforcement | [`web/express-openid`](web/express-openid) (`/protected`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`sensitive-action` tool) |
+| Hardware key enforcement | [`web/express-openid`](web/express-openid) (`/protected`), [`web/flask-authlib`](web/flask-authlib) (`/protected`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`sensitive-action` tool) |
 | UserInfo endpoint calls | [`web/express-openid`](web/express-openid), [`web/flask-authlib`](web/flask-authlib), [`native/node`](native/node), [`native/python`](native/python) |
 | Token introspection | [`web/express-openid`](web/express-openid) (`/introspect`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`introspect-token` tool) |
 | Post-auth API calls | [`native/node`](native/node), [`native/python`](native/python) |

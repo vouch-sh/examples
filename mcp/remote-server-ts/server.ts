@@ -29,6 +29,7 @@ interface AuthInfo {
   sub: string;
   hardwareVerified: boolean;
   hardwareAaguid: string | null;
+  rawToken: string;
 }
 
 // Bearer token verification middleware
@@ -57,6 +58,7 @@ async function verifyToken(
       sub: payload.sub as string,
       hardwareVerified: payload.hardware_verified as boolean,
       hardwareAaguid: (payload.hardware_aaguid as string) || null,
+      rawToken: token,
     };
     next();
   } catch {
@@ -66,38 +68,6 @@ async function verifyToken(
       id: null,
     });
   }
-}
-
-/**
- * Verify an opaque access token via the introspection endpoint.
- * Use this instead of JWT verification when tokens are opaque.
- */
-async function verifyTokenViaIntrospection(
-  accessToken: string,
-  clientId: string,
-  clientSecret: string,
-): Promise<Record<string, unknown> | null> {
-  const params = new URLSearchParams({
-    token: accessToken,
-    client_id: clientId,
-    client_secret: clientSecret,
-  });
-
-  const response = await fetch(`${VOUCH_ISSUER}/oauth/introspect`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params,
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const result = await response.json();
-  if (!result.active) {
-    return null;
-  }
-  return result;
 }
 
 // MCP server with session management
@@ -196,21 +166,43 @@ function createMcpServer(auth: AuthInfo) {
         };
       }
 
-      // Note: In a real implementation, you would pass the actual
-      // bearer token here. This demonstrates the introspection pattern.
+      const params = new URLSearchParams({
+        token: auth.rawToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      });
+
+      const response = await fetch(`${VOUCH_ISSUER}/oauth/introspect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params,
+      });
+
+      if (!response.ok) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `Introspection request failed: ${response.status}`,
+            },
+          ],
+        };
+      }
+
+      const result = await response.json();
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify(
               {
+                active: result.active,
+                ...result,
                 note:
                   'Token introspection is the correct pattern for validating ' +
                   'opaque access tokens. For JWTs (like Vouch ID tokens), ' +
-                  'use local JWKS verification instead. See verifyTokenViaIntrospection() ' +
-                  'in server.ts for the implementation.',
-                endpoint: `${VOUCH_ISSUER}/oauth/introspect`,
-                authenticated_as: auth.email,
+                  'use local JWKS verification instead.',
               },
               null,
               2,

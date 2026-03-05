@@ -32,11 +32,39 @@ TEMPLATE = """
     {% endif %}
     <ul>
       <li><a href="/userinfo">UserInfo</a></li>
+      <li><a href="/protected">Protected Route</a></li>
     </ul>
     <a href="/logout">Sign out</a>
   {% else %}
     <a href="/login">Sign in with Vouch</a>
   {% endif %}
+</body>
+</html>
+"""
+
+PROTECTED_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head><title>Protected</title></head>
+<body>
+  <h1>Protected Route</h1>
+  <p>Signed in as {{ email }}</p>
+  <p><strong>Hardware Verified</strong></p>
+  <p>AAGUID: {{ aaguid }}</p>
+  <a href="/">Back</a>
+</body>
+</html>
+"""
+
+PROTECTED_DENIED_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head><title>Access Denied</title></head>
+<body>
+  <h1>Access Denied</h1>
+  <p>This route requires hardware key verification.</p>
+  <p><code>hardware_verified</code> is <strong>false</strong> for your session.</p>
+  <a href="/">Back</a>
 </body>
 </html>
 """
@@ -71,12 +99,26 @@ def callback():
     session['user'] = {
         'email': userinfo.get('email'),
         'hardware_verified': userinfo.get('hardware_verified', False),
+        'hardware_aaguid': userinfo.get('hardware_aaguid'),
     }
     session['tokens'] = {
         'access_token': token.get('access_token'),
         'expires_at': token.get('expires_at'),
     }
     return redirect('/')
+
+@app.route('/protected')
+def protected():
+    user = session.get('user')
+    if not user:
+        return redirect('/login')
+    if not user.get('hardware_verified'):
+        return render_template_string(PROTECTED_DENIED_TEMPLATE), 403
+    return render_template_string(
+        PROTECTED_TEMPLATE,
+        email=user['email'],
+        aaguid=user.get('hardware_aaguid') or 'N/A',
+    )
 
 @app.route('/userinfo')
 def userinfo():

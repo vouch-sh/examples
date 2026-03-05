@@ -144,14 +144,14 @@ for (const example of WEB_EXAMPLES) {
         timeout: 5_000,
       });
 
+      // Test /protected route (should succeed since Vouch sessions are hardware verified)
+      await page.goto(`${baseUrl}/protected`);
+      await expect(page.locator("body")).toContainText("Hardware Verified", {
+        timeout: 5_000,
+      });
+
       // Test express-openid specific routes
       if (example.name === "express-openid") {
-        // Test /protected route (should succeed since Vouch sessions are hardware verified)
-        await page.goto(`${baseUrl}/protected`);
-        await expect(page.locator("body")).toContainText("Hardware Verified", {
-          timeout: 5_000,
-        });
-
         // Test /introspect route
         await page.goto(`${baseUrl}/introspect`);
         await expect(page.locator("body")).toContainText("Token Introspection", {
