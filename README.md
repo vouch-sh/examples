@@ -18,7 +18,7 @@ Server-side applications that securely store a client secret. Uses the Authoriza
 |-----------|-----------|----------|
 | Rails + OmniAuth | [`web/rails-omniauth`](web/rails-omniauth) | Ruby |
 | Django + django-allauth | [`web/django-allauth`](web/django-allauth) | Python |
-| Express + Passport | [`web/express-passport`](web/express-passport) | Node.js |
+| Express + openid-client | [`web/express-openid`](web/express-openid) | Node.js |
 | Next.js + NextAuth | [`web/nextjs-nextauth`](web/nextjs-nextauth) | Node.js |
 | Laravel + Socialite | [`web/laravel-socialite`](web/laravel-socialite) | PHP |
 | Flask + Authlib | [`web/flask-authlib`](web/flask-authlib) | Python |
@@ -102,6 +102,19 @@ Vouch exposes standard OIDC endpoints:
 | UserInfo | `{VOUCH_ISSUER}/oauth/userinfo` |
 | JWKS | `{VOUCH_ISSUER}/oauth/jwks` |
 | Device Authorization | `{VOUCH_ISSUER}/oauth/device` |
+
+## Advanced Patterns
+
+Several examples go beyond basic login to demonstrate real-world OIDC patterns:
+
+| Pattern | Examples |
+|---------|----------|
+| Hardware key enforcement | [`web/express-openid`](web/express-openid) (`/protected`), [`web/flask-authlib`](web/flask-authlib) (`/protected`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`sensitive-action` tool) |
+| UserInfo endpoint calls | [`web/express-openid`](web/express-openid), [`web/flask-authlib`](web/flask-authlib), [`native/node`](native/node), [`native/python`](native/python) |
+| Token introspection | [`web/express-openid`](web/express-openid) (`/introspect`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`introspect-token` tool) |
+| Post-auth API calls | [`native/node`](native/node), [`native/python`](native/python) |
+| Token expiry display | [`spa/react`](spa/react) |
+| Profile claims display | [`spa/react`](spa/react) |
 
 ## Custom Claims
 

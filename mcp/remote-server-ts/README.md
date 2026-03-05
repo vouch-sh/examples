@@ -7,7 +7,11 @@ This example demonstrates:
 - **Protected Resource Metadata** ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) — advertises Vouch as the authorization server
 - **Bearer token validation** — verifies JWTs issued by Vouch using ES256
 
-The server exposes a `whoami` tool that returns the authenticated user's email and `hardware_verified` claim from the Vouch ID token.
+The server exposes tools demonstrating identity-aware MCP patterns:
+
+- **`whoami`** — Returns the authenticated user's email, `hardware_verified`, and `hardware_aaguid` claims
+- **`sensitive-action`** — Gated on `hardware_verified`: returns an error if the user's session lacks hardware key verification
+- **`introspect-token`** — Documents the token introspection pattern for opaque access tokens (vs JWT verification for ID tokens)
 
 ## Environment Variables
 
@@ -15,6 +19,8 @@ The server exposes a `whoami` tool that returns the authenticated user's email a
 |----------|----------|-------------|
 | `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_AUDIENCE` | No | Expected token audience (defaults to server URL) |
+| `VOUCH_CLIENT_ID` | For introspection | OAuth client ID (required by `introspect-token` tool) |
+| `VOUCH_CLIENT_SECRET` | For introspection | OAuth client secret (required by `introspect-token` tool) |
 
 ## Run
 

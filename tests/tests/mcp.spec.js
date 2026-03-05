@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, obtainAccessToken } = require("../src/oidc-flow");
 const { MCP_EXAMPLES } = require("../src/examples");
@@ -34,10 +34,12 @@ async function parseMcpResponse(res) {
 }
 
 let cookie;
+let creds;
 
 test.beforeAll(async () => {
   cookie = loadCookie();
-  await cleanupStaleApps(cookie, APP_PREFIX);
+  creds = { token: loadToken(), dpopKey: loadDpopKey() };
+  await cleanupStaleApps(creds, APP_PREFIX);
   cleanupStaleContainers();
 });
 
@@ -60,7 +62,7 @@ for (const example of MCP_EXAMPLES) {
       callbackUrl = `${baseUrl}/callback`;
 
       // Create the MCP server's Vouch app
-      mcpApp = await createApp(cookie, {
+      mcpApp = await createApp(creds, {
         name: appName,
         applicationType: "web",
         redirectUris: [callbackUrl],
@@ -86,10 +88,10 @@ for (const example of MCP_EXAMPLES) {
     test.afterAll(async () => {
       stop(containerName);
       if (mcpApp) {
-        await deleteApp(cookie, mcpApp.id);
+        await deleteApp(creds, mcpApp.id);
       }
       if (tokenApp) {
-        await deleteApp(cookie, tokenApp.id);
+        await deleteApp(creds, tokenApp.id);
       }
     });
 
@@ -131,7 +133,7 @@ for (const example of MCP_EXAMPLES) {
       browser,
     }) => {
       // Create a temporary web app to obtain an access token via auth code flow
-      tokenApp = await createApp(cookie, {
+      tokenApp = await createApp(creds, {
         name: `${APP_PREFIX}token-${example.name}`,
         applicationType: "web",
         redirectUris: [callbackUrl],
@@ -177,7 +179,7 @@ for (const example of MCP_EXAMPLES) {
     test("whoami tool returns user email", async ({ browser }) => {
       // Reuse existing token if available, otherwise obtain one
       if (!accessToken) {
-        tokenApp = await createApp(cookie, {
+        tokenApp = await createApp(creds, {
           name: `${APP_PREFIX}token-${example.name}`,
           applicationType: "web",
           redirectUris: [callbackUrl],
@@ -257,6 +259,92 @@ for (const example of MCP_EXAMPLES) {
       // The whoami tool should return content containing the user's email
       const content = JSON.stringify(toolBody.result);
       expect(content).toMatch(/@/); // should contain an email address
+    });
+
+    test("sensitive-action tool enforces hardware verification", async ({
+      browser,
+    }) => {
+      // Reuse existing token if available, otherwise obtain one
+      if (!accessToken) {
+        tokenApp = await createApp(creds, {
+          name: `${APP_PREFIX}token-${example.name}`,
+          applicationType: "web",
+          redirectUris: [callbackUrl],
+        });
+
+        const context = await browser.newContext();
+        await setupContext(context, cookie);
+
+        accessToken = await obtainAccessToken(context, {
+          clientId: tokenApp.client_id,
+          clientSecret: tokenApp.client_secret,
+          redirectUri: callbackUrl,
+        });
+
+        await context.close();
+      }
+
+      // Initialize the MCP session
+      const initRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          ...MCP_HEADERS,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test", version: "1.0" },
+          },
+        }),
+      });
+
+      expect(initRes.status).toBe(200);
+
+      const sessionId = initRes.headers.get("mcp-session-id");
+      const headers = {
+        ...MCP_HEADERS,
+        Authorization: `Bearer ${accessToken}`,
+      };
+      if (sessionId) {
+        headers["mcp-session-id"] = sessionId;
+      }
+
+      // Send initialized notification
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+        }),
+      });
+
+      // Call the sensitive-action tool
+      const toolRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "sensitive-action",
+            arguments: {},
+          },
+        }),
+      });
+
+      expect(toolRes.status).toBe(200);
+      const toolBody = await parseMcpResponse(toolRes);
+      expect(toolBody).toHaveProperty("result");
+      // Vouch sessions are hardware verified, so this should succeed
+      const content = JSON.stringify(toolBody.result);
+      expect(content).toContain("hardware_verified");
     });
   });
 }

@@ -72,7 +72,8 @@ SOCIALACCOUNT_PROVIDERS = {
             'secret': os.environ.get('VOUCH_CLIENT_SECRET', ''),
             'settings': {
                 'server_url': os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh'),
-                'fetch_userinfo': False,
+                'fetch_userinfo': True,
+                'oauth_pkce_enabled': True,
             },
         }],
     },

@@ -27,6 +27,7 @@ type sessionData struct {
 // Simple in-memory session store (use a proper store in production)
 var sessions = map[string]*sessionData{}
 var states = map[string]bool{}
+var pkceVerifiers = map[string]string{}
 
 func main() {
 	issuer := os.Getenv("VOUCH_ISSUER")
@@ -101,7 +102,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	state := generateState()
 	states[state] = true
-	http.Redirect(w, r, oauth2Config.AuthCodeURL(state), http.StatusFound)
+	pkceVerifier := oauth2.GenerateVerifier()
+	pkceVerifiers[state] = pkceVerifier
+	http.Redirect(w, r, oauth2Config.AuthCodeURL(state, oauth2.S256ChallengeOption(pkceVerifier)), http.StatusFound)
 }
 
 func handleCallback(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +115,11 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	delete(states, state)
 
+	pkceVerifier := pkceVerifiers[state]
+	delete(pkceVerifiers, state)
+
 	code := r.URL.Query().Get("code")
-	token, err := oauth2Config.Exchange(r.Context(), code)
+	token, err := oauth2Config.Exchange(r.Context(), code, oauth2.VerifierOption(pkceVerifier))
 	if err != nil {
 		http.Error(w, "Token exchange failed", http.StatusInternalServerError)
 		return

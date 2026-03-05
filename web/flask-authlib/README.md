@@ -29,3 +29,8 @@ docker run -p 3000:3000 \
 ```
 http://localhost:3000/callback
 ```
+
+## Advanced Features
+
+- **`/userinfo`** — Calls the Vouch UserInfo endpoint with the stored access token and displays the full response
+- **`/protected`** — Hardware key enforcement: returns 403 if `hardware_verified` is false, shows `hardware_aaguid` when present

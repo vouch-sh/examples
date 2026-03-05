@@ -25,11 +25,12 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = clientId;
     options.ClientSecret = clientSecret;
     options.ResponseType = OpenIdConnectResponseType.Code;
+    options.UsePkce = true;
     options.Scope.Clear();
     options.Scope.Add("openid");
     options.Scope.Add("email");
     options.SaveTokens = true;
-    options.GetClaimsFromUserInfoEndpoint = false;
+    options.GetClaimsFromUserInfoEndpoint = true;
     options.CallbackPath = new PathString(new Uri(redirectUri).AbsolutePath);
     options.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
     {

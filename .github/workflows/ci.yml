@@ -31,7 +31,7 @@ jobs:
           - directory: web/aspnet-core
           - directory: web/axum-openidconnect
           - directory: web/django-allauth
-          - directory: web/express-passport
+          - directory: web/express-openid
           - directory: web/fastapi-authlib
           - directory: web/flask-authlib
           - directory: web/go-oidc

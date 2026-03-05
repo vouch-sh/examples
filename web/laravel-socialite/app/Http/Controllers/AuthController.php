@@ -44,12 +44,23 @@ class AuthController extends \Illuminate\Routing\Controller
         return Socialite::driver('oidc')
             ->setConfig($config)
             ->scopes(['openid', 'email'])
+            ->enablePKCE()
             ->redirect();
     }
 
     public function callback(Request $request)
     {
-        $vouchUser = Socialite::driver('oidc')->user();
+        $config = new Config(
+            config('services.oidc.client_id'),
+            config('services.oidc.client_secret'),
+            config('services.oidc.redirect'),
+            ['base_url' => config('services.oidc.base_url')]
+        );
+
+        $vouchUser = Socialite::driver('oidc')
+            ->setConfig($config)
+            ->enablePKCE()
+            ->user();
 
         $request->session()->put('user', [
             'email' => $vouchUser->email,

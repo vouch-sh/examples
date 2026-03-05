@@ -1,5 +1,5 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, handleAuthorize } = require("../src/oidc-flow");
 const { WEB_EXAMPLES } = require("../src/examples");
@@ -7,11 +7,12 @@ const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
 
 let cookie;
+let creds;
 
 test.beforeAll(async () => {
   cookie = loadCookie();
-  // Clean up stale apps and containers from previous runs
-  await cleanupStaleApps(cookie, APP_PREFIX);
+  creds = { token: loadToken(), dpopKey: loadDpopKey() };
+  await cleanupStaleApps(creds, APP_PREFIX);
   cleanupStaleContainers();
 });
 
@@ -30,7 +31,7 @@ for (const example of WEB_EXAMPLES) {
       const callbackUrl = `${baseUrl}${example.callbackPath}`;
 
       // Create Vouch OAuth app
-      app = await createApp(cookie, {
+      app = await createApp(creds, {
         name: appName,
         applicationType: "web",
         redirectUris: [callbackUrl],
@@ -53,7 +54,7 @@ for (const example of WEB_EXAMPLES) {
     test.afterAll(async () => {
       stop(containerName);
       if (app) {
-        await deleteApp(cookie, app.id);
+        await deleteApp(creds, app.id);
       }
     });
 
@@ -98,6 +99,68 @@ for (const example of WEB_EXAMPLES) {
       await expect(page.locator("body")).toContainText("Signed in as", {
         timeout: 10_000,
       });
+
+      await context.close();
+    });
+
+    test("advanced routes after login", async ({ browser }) => {
+      // Only run for examples that have advanced routes
+      if (example.name !== "express-openid" && example.name !== "flask-authlib") {
+        test.skip();
+        return;
+      }
+
+      const context = await browser.newContext();
+      await setupContext(context, cookie);
+      const page = await context.newPage();
+
+      // First, log in
+      await page.goto(baseUrl);
+      const loginElement = page.locator(example.loginSelector).first();
+      await expect(loginElement).toBeVisible({ timeout: 5_000 });
+
+      if (example.preAuthorizeSelector) {
+        await loginElement.click();
+        const preAuth = page.locator(example.preAuthorizeSelector).first();
+        await expect(preAuth).toBeVisible({ timeout: 5_000 });
+        await handleAuthorize(page, {
+          triggerAction: () => preAuth.click(),
+        });
+      } else {
+        await handleAuthorize(page, {
+          triggerAction: () => loginElement.click(),
+        });
+      }
+      await expect(page.locator("body")).toContainText("Signed in as", {
+        timeout: 10_000,
+      });
+
+      // Test /userinfo route
+      await page.goto(`${baseUrl}/userinfo`);
+      await expect(page.locator("body")).toContainText("UserInfo", {
+        timeout: 5_000,
+      });
+      await expect(page.locator("body")).toContainText("email", {
+        timeout: 5_000,
+      });
+
+      // Test /protected route (should succeed since Vouch sessions are hardware verified)
+      await page.goto(`${baseUrl}/protected`);
+      await expect(page.locator("body")).toContainText("Hardware Verified", {
+        timeout: 5_000,
+      });
+
+      // Test express-openid specific routes
+      if (example.name === "express-openid") {
+        // Test /introspect route
+        await page.goto(`${baseUrl}/introspect`);
+        await expect(page.locator("body")).toContainText("Token Introspection", {
+          timeout: 5_000,
+        });
+        await expect(page.locator("body")).toContainText("active", {
+          timeout: 5_000,
+        });
+      }
 
       await context.close();
     });

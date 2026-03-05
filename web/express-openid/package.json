@@ -1,11 +1,11 @@
 {
-  "name": "vouch-express-passport",
+  "name": "vouch-express-openid",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "express": "^5.2.0",
     "express-session": "^1.19.0",
-    "passport": "^0.7.0",
-    "passport-openidconnect": "^0.1.2"
+    "openid-client": "^6.8.2"
   }
 }

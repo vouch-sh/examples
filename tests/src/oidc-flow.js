@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const { VOUCH_ISSUER_URL, VOUCH_DOMAIN, VOUCH_INSECURE } = require("./config");
 
 /** Origin of the Vouch issuer (e.g. "https://us.vouch.sh" or "http://localhost:3000"). */
@@ -10,17 +11,26 @@ const VOUCH_ORIGIN = new URL(VOUCH_ISSUER_URL).origin;
  * @param {{ name: string, value: string, path: string }} cookie
  */
 async function injectVouchCookie(context, cookie) {
-  await context.addCookies([
-    {
-      name: cookie.name,
-      value: cookie.value,
-      domain: VOUCH_DOMAIN === "localhost" ? VOUCH_DOMAIN : `.${VOUCH_DOMAIN}`,
-      path: cookie.path || "/",
-      httpOnly: true,
-      secure: !VOUCH_INSECURE,
-      sameSite: "Lax",
-    },
-  ]);
+  // __Host- cookies cannot have a domain attribute; use url instead
+  const cookieData = {
+    name: cookie.name,
+    value: cookie.value,
+    path: cookie.path || "/",
+    httpOnly: true,
+    secure: !VOUCH_INSECURE,
+    sameSite: "Lax",
+  };
+
+  if (cookie.name.startsWith("__Host-")) {
+    // __Host- cookies cannot have a domain; Playwright derives it from url
+    cookieData.url = VOUCH_ISSUER_URL;
+    delete cookieData.path;
+  } else {
+    cookieData.domain =
+      VOUCH_DOMAIN === "localhost" ? VOUCH_DOMAIN : `.${VOUCH_DOMAIN}`;
+  }
+
+  await context.addCookies([cookieData]);
 }
 
 /**
@@ -170,14 +180,23 @@ async function obtainAccessToken(context, opts) {
   const issuer = opts.issuer || VOUCH_ISSUER_URL;
   const page = await context.newPage();
 
+  // Generate PKCE code verifier and challenge (RFC 7636)
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = crypto
+    .createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
+
   try {
-    // Build the authorize URL
+    // Build the authorize URL with PKCE
     const authorizeUrl = new URL(`${issuer}/oauth/authorize`);
     authorizeUrl.searchParams.set("response_type", "code");
     authorizeUrl.searchParams.set("client_id", opts.clientId);
     authorizeUrl.searchParams.set("redirect_uri", opts.redirectUri);
     authorizeUrl.searchParams.set("scope", "openid email");
     authorizeUrl.searchParams.set("state", "test-state");
+    authorizeUrl.searchParams.set("code_challenge", codeChallenge);
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
 
     // Navigate to authorize — with auto-consent this may redirect straight
     // through to the callback URL, so we must wait for it to settle.
@@ -198,7 +217,7 @@ async function obtainAccessToken(context, opts) {
       );
     }
 
-    // Exchange the code for tokens
+    // Exchange the code for tokens (with PKCE code_verifier)
     const tokenRes = await fetch(`${issuer}/oauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -208,6 +227,7 @@ async function obtainAccessToken(context, opts) {
         redirect_uri: opts.redirectUri,
         client_id: opts.clientId,
         client_secret: opts.clientSecret,
+        code_verifier: codeVerifier,
       }),
     });
 

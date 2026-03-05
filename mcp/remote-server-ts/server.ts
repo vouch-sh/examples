@@ -24,6 +24,14 @@ app.get('/.well-known/oauth-protected-resource', (_req, res) => {
   });
 });
 
+interface AuthInfo {
+  email: string;
+  sub: string;
+  hardwareVerified: boolean;
+  hardwareAaguid: string | null;
+  rawToken: string;
+}
+
 // Bearer token verification middleware
 async function verifyToken(
   req: express.Request,
@@ -49,6 +57,8 @@ async function verifyToken(
       email: payload.email as string,
       sub: payload.sub as string,
       hardwareVerified: payload.hardware_verified as boolean,
+      hardwareAaguid: (payload.hardware_aaguid as string) || null,
+      rawToken: token,
     };
     next();
   } catch {
@@ -63,11 +73,7 @@ async function verifyToken(
 // MCP server with session management
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
-function createMcpServer(auth: {
-  email: string;
-  sub: string;
-  hardwareVerified: boolean;
-}) {
+function createMcpServer(auth: AuthInfo) {
   const server = new McpServer({
     name: 'vouch-example',
     version: '1.0.0',
@@ -87,6 +93,116 @@ function createMcpServer(auth: {
                 email: auth.email,
                 sub: auth.sub,
                 hardware_verified: auth.hardwareVerified,
+                hardware_aaguid: auth.hardwareAaguid,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    'sensitive-action',
+    'Performs a sensitive action that requires hardware key verification',
+    {},
+    async () => {
+      if (!auth.hardwareVerified) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                error: 'hardware_key_required',
+                message:
+                  'This action requires hardware key verification. ' +
+                  'Your session has hardware_verified=false.',
+              }),
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                status: 'success',
+                message: 'Sensitive action completed',
+                hardware_verified: true,
+                hardware_aaguid: auth.hardwareAaguid,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    'introspect-token',
+    'Introspects the current access token via the Vouch introspection endpoint. ' +
+      'Requires VOUCH_CLIENT_ID and VOUCH_CLIENT_SECRET environment variables.',
+    {},
+    async () => {
+      const clientId = process.env.VOUCH_CLIENT_ID;
+      const clientSecret = process.env.VOUCH_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: 'VOUCH_CLIENT_ID and VOUCH_CLIENT_SECRET are required for introspection.',
+            },
+          ],
+        };
+      }
+
+      const params = new URLSearchParams({
+        token: auth.rawToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      });
+
+      const response = await fetch(`${VOUCH_ISSUER}/oauth/introspect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params,
+      });
+
+      if (!response.ok) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `Introspection request failed: ${response.status}`,
+            },
+          ],
+        };
+      }
+
+      const result = await response.json();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                active: result.active,
+                ...result,
+                note:
+                  'Token introspection is the correct pattern for validating ' +
+                  'opaque access tokens. For JWTs (like Vouch ID tokens), ' +
+                  'use local JWKS verification instead.',
               },
               null,
               2,

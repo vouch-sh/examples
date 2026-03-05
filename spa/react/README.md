@@ -17,3 +17,8 @@ docker run -p 3000:3000 \
 ## Callback URL
 
 Register `http://localhost:3000/callback` as the redirect URI in your OIDC provider.
+
+## Advanced Features
+
+- **Profile claims** — Displays `sub`, `email`, `email_verified`, `hardware_verified`, and `hardware_aaguid` from the ID token
+- **Token expiry countdown** — Shows a live countdown of seconds until the access token expires
