@@ -39,6 +39,7 @@ Browser-only applications using PKCE (no client secret required).
 | Vanilla JS + oidc-client-ts | [`spa/vanilla-js`](spa/vanilla-js) | JavaScript |
 | SvelteKit + oidc-client-ts | [`spa/sveltekit`](spa/sveltekit) | JavaScript |
 | Angular + angular-auth-oidc-client | [`spa/angular`](spa/angular) | TypeScript |
+| BFF + Express (recommended) | [`spa/bff-express`](spa/bff-express) | Node.js |
 
 ### Native & CLI Applications (Public Clients)
 
@@ -124,6 +125,10 @@ Vouch ID tokens include these additional claims:
 |-------|------|-------------|
 | `hardware_verified` | boolean | Always `true` for Vouch sessions — confirms a hardware key was used |
 | `hardware_aaguid` | string | Identifies the authenticator hardware model |
+
+## Security Considerations
+
+These examples are demonstrations, not production-ready applications. For production browser-based apps, consider using the Backend-for-Frontend (BFF) pattern ([`spa/bff-express`](spa/bff-express)) where tokens stay on the server and the browser only receives HttpOnly session cookies. See the [IETF OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) draft for recommendations.
 
 ## License
 

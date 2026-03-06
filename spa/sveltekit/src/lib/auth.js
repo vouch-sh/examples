@@ -7,7 +7,7 @@ const config = {
   post_logout_redirect_uri: typeof window !== 'undefined' ? window.location.origin : '',
   scope: 'openid email',
   userStore: typeof window !== 'undefined'
-    ? new WebStorageStateStore({ store: window.localStorage })
+    ? new WebStorageStateStore({ store: window.sessionStorage })
     : undefined,
 };
 

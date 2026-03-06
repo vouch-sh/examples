@@ -6,7 +6,7 @@ const config = {
   redirect_uri: '__VOUCH_REDIRECT_URI__',
   post_logout_redirect_uri: window.location.origin,
   scope: 'openid email',
-  userStore: new WebStorageStateStore({ store: window.localStorage }),
+  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
 };
 
 export const userManager = new UserManager(config);

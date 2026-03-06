@@ -1,0 +1,11 @@
+{
+  "name": "vouch-bff-express",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.0",
+    "express-session": "^1.19.0",
+    "openid-client": "^6.8.2"
+  }
+}

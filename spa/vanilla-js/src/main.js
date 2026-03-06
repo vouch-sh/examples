@@ -15,19 +15,33 @@ async function checkAuth() {
   const el = document.getElementById('user-info');
 
   if (user) {
-    el.innerHTML = `
-      <p>Signed in as ${user.profile.email}</p>
-      ${user.profile.hardware_verified ? '<p><strong>Hardware Verified</strong></p>' : ''}
-      <button id="logout-btn">Sign out</button>
-    `;
-    document.getElementById('logout-btn').addEventListener('click', () => {
+    el.textContent = '';
+    const p = document.createElement('p');
+    p.textContent = `Signed in as ${user.profile.email}`;
+    el.appendChild(p);
+    if (user.profile.hardware_verified) {
+      const hw = document.createElement('p');
+      const strong = document.createElement('strong');
+      strong.textContent = 'Hardware Verified';
+      hw.appendChild(strong);
+      el.appendChild(hw);
+    }
+    const logoutBtn = document.createElement('button');
+    logoutBtn.id = 'logout-btn';
+    logoutBtn.textContent = 'Sign out';
+    logoutBtn.addEventListener('click', () => {
       userManager.removeUser().then(() => checkAuth());
     });
+    el.appendChild(logoutBtn);
   } else {
-    el.innerHTML = '<button id="login-btn">Sign in with Vouch</button>';
-    document.getElementById('login-btn').addEventListener('click', () => {
+    el.textContent = '';
+    const loginBtn = document.createElement('button');
+    loginBtn.id = 'login-btn';
+    loginBtn.textContent = 'Sign in with Vouch';
+    loginBtn.addEventListener('click', () => {
       userManager.signinRedirect();
     });
+    el.appendChild(loginBtn);
   }
 }
 
