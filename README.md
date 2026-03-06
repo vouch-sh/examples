@@ -48,6 +48,9 @@ Terminal tools and headless servers using the Device Authorization Grant (RFC 86
 | Framework | Directory | Language |
 |-----------|-----------|----------|
 | Python + requests | [`native/python`](native/python) | Python |
+| Python Agent: AWS | [`native/python-agent-aws`](native/python-agent-aws) | Python |
+| Python Agent: GitHub | [`native/python-agent-github`](native/python-agent-github) | Python |
+| Python Agent: Multi-Credential | [`native/python-agent-multi`](native/python-agent-multi) | Python |
 | Node.js + fetch | [`native/node`](native/node) | Node.js |
 | Rust + reqwest | [`native/rust`](native/rust) | Rust |
 
@@ -59,6 +62,7 @@ Secure AI agent communication using Vouch for hardware-backed authentication.
 |----------|-----------|-------------|
 | MCP Remote Server (TypeScript) | [`mcp/remote-server-ts`](mcp/remote-server-ts) | [Model Context Protocol](https://modelcontextprotocol.io/) server with Bearer auth + Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) |
 | MCP Remote Server (Python) | [`mcp/remote-server-py`](mcp/remote-server-py) | Same as above, in Python with FastMCP |
+| MCP Credential Broker (Python) | [`mcp/credential-broker`](mcp/credential-broker) | MCP server that brokers AWS, GitHub, and SSH credentials on behalf of the authenticated user |
 | A2A Agent (Python) | [`a2a/python-agent`](a2a/python-agent) | [Agent-to-Agent](https://github.com/a2aproject/A2A) agent with OpenID Connect security scheme in the Agent Card |
 
 ## Quick Start
@@ -116,6 +120,9 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 | Post-auth API calls | [`native/node`](native/node), [`native/python`](native/python) |
 | Token expiry display | [`spa/react`](spa/react) |
 | Profile claims display | [`spa/react`](spa/react) |
+| Credential brokering (AWS) | [`native/python-agent-aws`](native/python-agent-aws), [`native/python-agent-multi`](native/python-agent-multi), [`mcp/credential-broker`](mcp/credential-broker) |
+| Credential brokering (GitHub) | [`native/python-agent-github`](native/python-agent-github), [`native/python-agent-multi`](native/python-agent-multi), [`mcp/credential-broker`](mcp/credential-broker) |
+| Credential brokering (SSH) | [`native/python-agent-multi`](native/python-agent-multi), [`mcp/credential-broker`](mcp/credential-broker) |
 
 ## Custom Claims
 

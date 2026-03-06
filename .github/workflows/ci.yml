@@ -18,10 +18,14 @@ jobs:
       matrix:
         include:
           - directory: a2a/python-agent
+          - directory: mcp/credential-broker
           - directory: mcp/remote-server-py
           - directory: mcp/remote-server-ts
           - directory: native/node
           - directory: native/python
+          - directory: native/python-agent-aws
+          - directory: native/python-agent-github
+          - directory: native/python-agent-multi
           - directory: native/rust
           - directory: spa/angular
           - directory: spa/bff-express
