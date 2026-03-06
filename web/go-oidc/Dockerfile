@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 RUN go mod tidy && go build -o server .
 
-FROM alpine:3.21
+FROM alpine:3.23
 
 RUN apk add --no-cache ca-certificates
 COPY --from=build /app/server /usr/local/bin/
