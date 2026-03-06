@@ -37,3 +37,7 @@ docker run -p 3000:3000 \
 |------|-------------|
 | `GET /.well-known/oauth-protected-resource` | Protected Resource Metadata (RFC 9728) |
 | `POST /mcp` | MCP Streamable HTTP endpoint (requires Bearer token) |
+
+## Production Considerations
+
+The `get-aws-credentials` tool returns `SecretAccessKey` and `SessionToken` as plaintext in the MCP tool response. This is fine for demonstration purposes since the credentials are short-lived (1 hour max), but in production you should consider whether credentials flowing through MCP tool responses as plaintext matches your threat model. Alternatives include having the MCP server make AWS API calls directly on behalf of the user rather than returning raw credentials to the client.

@@ -14,7 +14,36 @@ No client secret is needed. The user authenticates by visiting a URL in their br
 
 ## Prerequisites
 
-The AWS IAM role specified by `AWS_ROLE_ARN` must have a trust policy that allows Vouch as an OIDC identity provider. See the [AWS docs on web identity federation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_oidc.html) for setup instructions.
+The AWS IAM role specified by `AWS_ROLE_ARN` must have a trust policy that allows Vouch as an OIDC identity provider. You need two things:
+
+1. **Register Vouch as an OIDC provider** in IAM (provider URL: your `VOUCH_ISSUER`, audience: your `VOUCH_ISSUER` URL).
+
+2. **Create an IAM role** with a trust policy like:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789012:oidc-provider/us.vouch.sh"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "us.vouch.sh:aud": "https://us.vouch.sh"
+        },
+        "StringLike": {
+          "us.vouch.sh:sub": "*@example.com"
+        }
+      }
+    }
+  ]
+}
+```
+
+Replace `123456789012` with your AWS account ID, `us.vouch.sh` with your Vouch issuer hostname, and `*@example.com` with your domain. The `sub` condition restricts role assumption to users from your organization's email domain. See the [AWS docs on web identity federation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_oidc.html) for full details.
 
 ## Environment Variables
 

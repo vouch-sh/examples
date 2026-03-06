@@ -29,4 +29,4 @@ docker run -it \
 
 - **AWS** -- Calls Vouch's `GET /v1/credentials/aws/token` to get an AWS-specific ID token, then exchanges it for temporary AWS credentials via STS AssumeRoleWithWebIdentity. Requires an IAM role configured to trust the Vouch issuer. Skipped if `AWS_ROLE_ARN` is not set.
 - **GitHub** -- Requests a GitHub installation access token from the Vouch credential brokering API. Optionally scoped to a specific owner. Skipped if no GitHub app is configured.
-- **SSH** -- Generates an Ed25519 keypair and requests a signed SSH certificate from Vouch. The certificate can be used for SSH authentication to hosts that trust the Vouch CA.
+- **SSH** -- Self-contained: generates a fresh Ed25519 keypair, sends the public key to Vouch, and receives a signed SSH certificate. The certificate is valid for the session duration (typically 8 hours). To use the certificate for real SSH connections, write the private key and certificate to files and point your SSH config at them (e.g., `IdentityFile` and `CertificateFile`), or use `vouch setup ssh` which handles this automatically.

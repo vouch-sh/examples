@@ -83,7 +83,12 @@ else:
     aws_id_token = aws_data['id_token']
     print(f"AWS ID token: {aws_id_token[:20]}...")
 
-    sts = boto3.client('sts', aws_access_key_id='', aws_secret_access_key='')
+    from botocore import UNSIGNED
+    from botocore.config import Config
+
+    # UNSIGNED prevents boto3 from looking for ambient AWS credentials.
+    # AssumeRoleWithWebIdentity authenticates via the web identity token.
+    sts = boto3.client('sts', config=Config(signature_version=UNSIGNED))
     assumed = sts.assume_role_with_web_identity(
         RoleArn=AWS_ROLE_ARN,
         RoleSessionName='vouch-agent',

@@ -99,6 +99,9 @@ if GITHUB_REPO:
         print('Error: GITHUB_OWNER is required when GITHUB_REPO is set')
         sys.exit(1)
 
+    # The installation token is short-lived (~1 hour) and never written to
+    # disk. This is the whole point of Vouch — ephemeral credentials backed
+    # by hardware attestation, replacing long-lived PATs or deploy keys.
     clone_url = f'https://x-access-token:{token}@github.com/{owner}/{GITHUB_REPO}.git'
     print(f"\nCloning {owner}/{GITHUB_REPO}...")
     result = subprocess.run(

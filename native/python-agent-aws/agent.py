@@ -3,6 +3,8 @@ import sys
 import time
 import requests
 import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
@@ -81,7 +83,10 @@ print(f"Expires in: {aws_data['expires_in']}s")
 
 # Step 5: Assume AWS role using the Vouch-issued ID token
 print("\n--- AWS STS AssumeRoleWithWebIdentity ---")
-sts = boto3.client('sts', aws_access_key_id='', aws_secret_access_key='')
+# UNSIGNED prevents boto3 from looking for ambient AWS credentials (env vars,
+# instance profiles, etc.). AssumeRoleWithWebIdentity authenticates solely
+# via the web identity token — no AWS credentials are needed for the call.
+sts = boto3.client('sts', config=Config(signature_version=UNSIGNED))
 sts_response = sts.assume_role_with_web_identity(
     RoleArn=AWS_ROLE_ARN,
     RoleSessionName='vouch-agent',
