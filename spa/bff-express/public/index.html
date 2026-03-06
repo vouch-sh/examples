@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vouch BFF Example</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; border-radius: 4px; }
+    button, a.btn { padding: 0.5rem 1rem; cursor: pointer; text-decoration: none; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Vouch OIDC &mdash; BFF Pattern</h1>
+  <div id="app">Loading&hellip;</div>
+
+  <script>
+    const app = document.getElementById('app');
+
+    async function checkAuth() {
+      const res = await fetch('/api/me');
+      const data = await res.json();
+
+      app.textContent = '';
+
+      if (data.authenticated) {
+        const p = document.createElement('p');
+        p.textContent = 'Signed in as ' + data.user.email;
+        app.appendChild(p);
+
+        if (data.user.hardwareVerified) {
+          const hw = document.createElement('p');
+          const strong = document.createElement('strong');
+          strong.textContent = 'Hardware Verified';
+          hw.appendChild(strong);
+          app.appendChild(hw);
+        }
+
+        const userinfoBtn = document.createElement('button');
+        userinfoBtn.textContent = 'Fetch UserInfo';
+        userinfoBtn.addEventListener('click', fetchUserInfo);
+        app.appendChild(userinfoBtn);
+
+        app.appendChild(document.createTextNode(' '));
+
+        const logoutLink = document.createElement('a');
+        logoutLink.href = '/auth/logout';
+        logoutLink.textContent = 'Sign out';
+        logoutLink.className = 'btn';
+        app.appendChild(logoutLink);
+      } else {
+        const loginLink = document.createElement('a');
+        loginLink.href = '/auth/login';
+        loginLink.textContent = 'Sign in with Vouch';
+        loginLink.className = 'btn';
+        app.appendChild(loginLink);
+      }
+    }
+
+    async function fetchUserInfo() {
+      const res = await fetch('/api/userinfo');
+      const data = await res.json();
+
+      let pre = document.getElementById('userinfo-output');
+      if (!pre) {
+        pre = document.createElement('pre');
+        pre.id = 'userinfo-output';
+        app.appendChild(pre);
+      }
+      pre.textContent = JSON.stringify(data, null, 2);
+    }
+
+    checkAuth();
+  </script>
+</body>
+</html>

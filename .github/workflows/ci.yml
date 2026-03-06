@@ -24,6 +24,7 @@ jobs:
           - directory: native/python
           - directory: native/rust
           - directory: spa/angular
+          - directory: spa/bff-express
           - directory: spa/react
           - directory: spa/sveltekit
           - directory: spa/vanilla-js
