@@ -33,7 +33,7 @@ def verify_bearer_token(request: Request) -> dict | None:
         payload = jwt.decode(
             token,
             signing_key.key,
-            algorithms=['ES256'],
+            algorithms=[signing_key.algorithm_name],
             issuer=VOUCH_ISSUER,
             options={'verify_aud': False},
         )

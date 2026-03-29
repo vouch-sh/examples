@@ -177,6 +177,10 @@ for (const example of MCP_EXAMPLES) {
     });
 
     test("whoami tool returns user email", async ({ browser }) => {
+      if (!example.hasWhoami) {
+        test.skip();
+        return;
+      }
       // Reuse existing token if available, otherwise obtain one
       if (!accessToken) {
         tokenApp = await createApp(creds, {
@@ -264,6 +268,10 @@ for (const example of MCP_EXAMPLES) {
     test("sensitive-action tool enforces hardware verification", async ({
       browser,
     }) => {
+      if (!example.hasWhoami) {
+        test.skip();
+        return;
+      }
       // Reuse existing token if available, otherwise obtain one
       if (!accessToken) {
         tokenApp = await createApp(creds, {

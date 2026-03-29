@@ -112,6 +112,15 @@ const WEB_EXAMPLES = [
     callbackPath: "/callback",
     logoutMethod: "POST",
   },
+  {
+    name: "bff-express",
+    dir: "spa/bff-express",
+    type: "web",
+    loginSelector: 'a[href="/auth/login"]',
+    logoutSelector: 'a[href="/auth/logout"]',
+    callbackPath: "/auth/callback",
+    logoutMethod: "GET",
+  },
 ];
 
 /** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string }>} */
@@ -158,7 +167,7 @@ const SPA_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[] }>} */
+/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], extraEnv?: Record<string, string> }>} */
 const NATIVE_EXAMPLES = [
   {
     name: "native-node",
@@ -193,18 +202,55 @@ const NATIVE_EXAMPLES = [
       "Email:",
     ],
   },
+  {
+    name: "native-python-agent-aws",
+    dir: "native/python-agent-aws",
+    type: "native",
+    stdoutMarkers: [
+      "To sign in, visit:",
+      "Enter code:",
+    ],
+    // AWS_ROLE_ARN is required at startup; dummy value is fine since
+    // the device flow can't complete in automated tests anyway.
+    extraEnv: { AWS_ROLE_ARN: "arn:aws:iam::000000000000:role/test" },
+  },
+  {
+    name: "native-python-agent-github",
+    dir: "native/python-agent-github",
+    type: "native",
+    stdoutMarkers: [
+      "To sign in, visit:",
+      "Enter code:",
+    ],
+  },
+  {
+    name: "native-python-agent-multi",
+    dir: "native/python-agent-multi",
+    type: "native",
+    stdoutMarkers: [
+      "To sign in, visit:",
+      "Enter code:",
+    ],
+  },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "mcp" }>} */
+/** @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean }>} */
 const MCP_EXAMPLES = [
   {
     name: "mcp-remote-server-ts",
     dir: "mcp/remote-server-ts",
     type: "mcp",
+    hasWhoami: true,
   },
   {
     name: "mcp-remote-server-py",
     dir: "mcp/remote-server-py",
+    type: "mcp",
+    hasWhoami: true,
+  },
+  {
+    name: "mcp-credential-broker",
+    dir: "mcp/credential-broker",
     type: "mcp",
   },
 ];

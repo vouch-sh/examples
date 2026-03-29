@@ -50,6 +50,7 @@ for (const example of NATIVE_EXAMPLES) {
         env: {
           VOUCH_ISSUER: VOUCH_ISSUER_URL,
           VOUCH_CLIENT_ID: app.client_id,
+          ...(example.extraEnv || {}),
         },
       });
 

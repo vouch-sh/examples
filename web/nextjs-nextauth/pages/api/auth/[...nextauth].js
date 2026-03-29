@@ -11,7 +11,6 @@ export default NextAuth({
     authorization: { params: { scope: 'openid email' } },
     checks: ['pkce', 'state'],
     idToken: true,
-    client: { id_token_signed_response_alg: 'ES256' },
     profile(profile) {
       return {
         id: profile.sub,
