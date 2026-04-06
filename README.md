@@ -1,6 +1,9 @@
 # Vouch OIDC Integration Examples
 
-Deployable examples for integrating with [Vouch](https://vouch.sh) as an OIDC provider. Each example is a minimal, self-contained application with a Dockerfile.
+[![CI](https://github.com/vouch-sh/examples/actions/workflows/ci.yml/badge.svg)](https://github.com/vouch-sh/examples/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+27 deployable examples for integrating with [Vouch](https://vouch.sh) as an OIDC provider across 9 languages and 5 categories. Each example is a minimal, self-contained application with a Dockerfile.
 
 ## Prerequisites
 
@@ -84,7 +87,8 @@ docker run -p 3000:3000 \
   vouch-example
 ```
 
-> **Note:** SPA examples do not require `VOUCH_CLIENT_SECRET`. Native/CLI examples do not require `VOUCH_REDIRECT_URI` or `VOUCH_CLIENT_SECRET`.
+> [!NOTE]
+> SPA examples do not require `VOUCH_CLIENT_SECRET`. Native/CLI examples do not require `VOUCH_REDIRECT_URI` or `VOUCH_CLIENT_SECRET`.
 
 ## Environment Variables
 
@@ -136,6 +140,10 @@ Vouch ID tokens include these additional claims:
 ## Security Considerations
 
 These examples are demonstrations, not production-ready applications. For production browser-based apps, consider using the Backend-for-Frontend (BFF) pattern ([`spa/bff-express`](spa/bff-express)) where tokens stay on the server and the browser only receives HttpOnly session cookies. See the [IETF OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) draft for recommendations.
+
+## Contributing
+
+To add a new example, follow the checklist in [CLAUDE.md](CLAUDE.md#adding-a-new-example).
 
 ## License
 
