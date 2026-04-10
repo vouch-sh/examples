@@ -6,6 +6,11 @@ import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+function decodeAccessToken(token) {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+}
+
 const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const clientId = process.env.VOUCH_CLIENT_ID;
 const clientSecret = process.env.VOUCH_CLIENT_SECRET;
@@ -75,11 +80,12 @@ app.get('/auth/callback', async (req, res) => {
     );
 
     const claims = tokens.claims();
+    const atClaims = decodeAccessToken(tokens.access_token);
     req.session.user = {
       id: claims.sub,
       email: claims.email,
-      hardwareVerified: claims.hardware_verified || false,
-      hardwareAaguid: claims.hardware_aaguid || null,
+      hardwareVerified: atClaims.hardware_verified || false,
+      hardwareAaguid: atClaims.hardware_aaguid || null,
     };
 
     req.session.tokens = {

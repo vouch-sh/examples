@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import requests as http_requests
@@ -69,6 +70,13 @@ PROTECTED_DENIED_TEMPLATE = """
 </html>
 """
 
+def decode_access_token(token):
+    """Hardware claims are in the access token JWT (RFC 9068), not the id_token."""
+    payload = token.split('.')[1]
+    payload += '=' * (4 - len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload))
+
+
 USERINFO_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -96,10 +104,11 @@ def login():
 def callback():
     token = oauth.vouch.authorize_access_token()
     userinfo = token.get('userinfo')
+    at_claims = decode_access_token(token['access_token'])
     session['user'] = {
         'email': userinfo.get('email'),
-        'hardware_verified': userinfo.get('hardware_verified', False),
-        'hardware_aaguid': userinfo.get('hardware_aaguid'),
+        'hardware_verified': at_claims.get('hardware_verified', False),
+        'hardware_aaguid': at_claims.get('hardware_aaguid'),
     }
     session['tokens'] = {
         'access_token': token.get('access_token'),

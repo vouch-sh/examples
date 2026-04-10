@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -138,18 +140,24 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims struct {
-		Email            string `json:"email"`
-		HardwareVerified bool   `json:"hardware_verified"`
+		Email string `json:"email"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		http.Error(w, "Failed to parse claims", http.StatusInternalServerError)
 		return
 	}
 
+	atClaims, err := decodeAccessToken(token.AccessToken)
+	if err != nil {
+		http.Error(w, "Failed to decode access token", http.StatusInternalServerError)
+		return
+	}
+	hwVerified, _ := atClaims["hardware_verified"].(bool)
+
 	sessionID := generateState()
 	sessions[sessionID] = &sessionData{
 		Email:            claims.Email,
-		HardwareVerified: claims.HardwareVerified,
+		HardwareVerified: hwVerified,
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -173,6 +181,22 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge: -1,
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// Hardware claims (hardware_verified, hardware_aaguid) are in the
+// access token JWT (RFC 9068), not the OIDC id_token.
+func decodeAccessToken(token string) (map[string]interface{}, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid JWT format")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	var claims map[string]interface{}
+	err = json.Unmarshal(payload, &claims)
+	return claims, err
 }
 
 func generateState() string {

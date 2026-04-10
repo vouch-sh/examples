@@ -1,3 +1,4 @@
+use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -25,7 +26,13 @@ struct ErrorResponse {
 #[derive(Deserialize)]
 struct UserInfoResponse {
     email: Option<String>,
-    hardware_verified: Option<bool>,
+}
+
+/// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+fn decode_access_token(token: &str) -> Option<serde_json::Value> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
+    serde_json::from_slice(&bytes).ok()
 }
 
 #[tokio::main]
@@ -80,10 +87,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if userinfo_response.status().is_success() {
                 let userinfo: UserInfoResponse = userinfo_response.json().await?;
                 println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
-                println!("Hardware verified: {}", userinfo.hardware_verified.unwrap_or(false));
             } else {
                 println!("Email: N/A");
-                println!("Hardware verified: false");
+            }
+
+            let at_claims = decode_access_token(&tokens.access_token);
+            let hw_verified = at_claims.as_ref()
+                .and_then(|c| c["hardware_verified"].as_bool())
+                .unwrap_or(false);
+            println!("Hardware verified: {hw_verified}");
+            if let Some(aaguid) = at_claims.as_ref().and_then(|c| c["hardware_aaguid"].as_str()) {
+                println!("Hardware AAGUID: {aaguid}");
             }
             return Ok(());
         }

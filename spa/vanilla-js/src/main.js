@@ -1,5 +1,10 @@
 import { UserManager } from 'oidc-client-ts';
 
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+function decodeAccessToken(token) {
+  return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+}
+
 const config = {
   authority: '__VOUCH_ISSUER__',
   client_id: '__VOUCH_CLIENT_ID__',
@@ -19,7 +24,8 @@ async function checkAuth() {
     const p = document.createElement('p');
     p.textContent = `Signed in as ${user.profile.email}`;
     el.appendChild(p);
-    if (user.profile.hardware_verified) {
+    const atClaims = user.access_token ? decodeAccessToken(user.access_token) : {};
+    if (atClaims.hardware_verified) {
       const hw = document.createElement('p');
       const strong = document.createElement('strong');
       strong.textContent = 'Hardware Verified';

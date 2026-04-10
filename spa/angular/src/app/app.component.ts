@@ -3,6 +3,11 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+function decodeAccessToken(token: string): Record<string, unknown> {
+  return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -33,11 +38,14 @@ export class AppComponent implements OnInit {
   hardwareVerified = false;
 
   ngOnInit() {
-    this.oidc.checkAuth().subscribe(({ isAuthenticated, userData }) => {
+    this.oidc.checkAuth().subscribe(({ isAuthenticated, userData, accessToken }) => {
       this.isAuthenticated = isAuthenticated;
       if (userData) {
         this.email = userData.email || '';
-        this.hardwareVerified = userData.hardware_verified || false;
+      }
+      if (accessToken) {
+        const atClaims = decodeAccessToken(accessToken);
+        this.hardwareVerified = (atClaims['hardware_verified'] as boolean) || false;
       }
       // After processing the callback, redirect to home with a full page load
       // so checkAuth() re-reads stored tokens and updates the UI

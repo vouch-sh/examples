@@ -1,6 +1,11 @@
 package sh.vouch.examples;
 
+import java.util.Base64;
+import java.util.Map;
+import org.springframework.boot.json.JsonParserFactory;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -15,9 +20,25 @@ public class DashboardController {
     }
 
     @GetMapping("/dashboard")
-    public String dashboard(@AuthenticationPrincipal OidcUser user, Model model) {
+    public String dashboard(
+            @AuthenticationPrincipal OidcUser user,
+            @RegisteredOAuth2AuthorizedClient("vouch") OAuth2AuthorizedClient authorizedClient,
+            Model model) {
         model.addAttribute("email", user.getEmail());
-        model.addAttribute("hardwareVerified", user.getClaim("hardware_verified"));
+
+        // Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+        boolean hardwareVerified = false;
+        String accessToken = authorizedClient.getAccessToken().getTokenValue();
+        String[] parts = accessToken.split("\\.");
+        if (parts.length == 3) {
+            try {
+                String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+                Map<String, Object> claims = JsonParserFactory.getJsonParser().parseMap(payload);
+                hardwareVerified = Boolean.TRUE.equals(claims.get("hardware_verified"));
+            } catch (Exception ignored) {
+            }
+        }
+        model.addAttribute("hardwareVerified", hardwareVerified);
         return "dashboard";
     }
 }

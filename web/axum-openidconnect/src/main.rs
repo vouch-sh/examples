@@ -11,25 +11,21 @@ use openidconnect::{
         CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
         CoreResponseType, CoreRevocableToken, CoreTokenType,
     },
-    AdditionalClaims, AuthenticationFlow, AuthorizationCode, Client, ClientId, ClientSecret,
-    CsrfToken, EmptyExtraTokenFields, IdTokenFields, IssuerUrl, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, RevocationErrorResponseType, Scope, StandardErrorResponse,
-    StandardTokenIntrospectionResponse, StandardTokenResponse, TokenResponse,
-    reqwest::async_http_client,
+    AdditionalClaims, AuthenticationFlow, AuthorizationCode, Client, ClientId,
+    ClientSecret, CsrfToken, EmptyExtraTokenFields, IdTokenFields, IssuerUrl, Nonce,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RevocationErrorResponseType, Scope,
+    StandardErrorResponse, StandardTokenIntrospectionResponse, StandardTokenResponse,
+    TokenResponse, reqwest::async_http_client,
 };
+use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_sessions::{MemoryStore, Session, SessionManagerLayer};
 
-// Custom additional claims to capture Vouch-specific fields from the ID token.
+// Additional claims placeholder (hardware claims are read from the access token JWT).
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct VouchClaims {
-    #[serde(default)]
-    hardware_verified: Option<bool>,
-    #[serde(default)]
-    hardware_aaguid: Option<String>,
-}
+struct VouchClaims {}
 
 impl AdditionalClaims for VouchClaims {}
 
@@ -197,9 +193,22 @@ async fn callback(
         .email()
         .map(|e| e.as_str().to_string())
         .unwrap_or_default();
-    let hardware_verified = claims
-        .additional_claims()
-        .hardware_verified
+
+    // Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+    // Extract via serialization since the TokenResponse trait's access_token()
+    // method is shadowed by a private field in StandardTokenResponse.
+    let hardware_verified = serde_json::to_value(&token_response)
+        .ok()
+        .and_then(|v| v["access_token"].as_str().map(String::from))
+        .and_then(|at| {
+            at.split('.').nth(1).and_then(|p| {
+                URL_SAFE_NO_PAD
+                    .decode(p)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| v["hardware_verified"].as_bool())
+            })
+        })
         .unwrap_or(false);
 
     let user = serde_json::json!({

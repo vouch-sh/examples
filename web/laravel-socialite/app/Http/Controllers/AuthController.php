@@ -62,9 +62,17 @@ class AuthController extends \Illuminate\Routing\Controller
             ->enablePKCE()
             ->user();
 
+        // Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+        $hardwareVerified = false;
+        $parts = explode('.', $vouchUser->token);
+        if (count($parts) === 3) {
+            $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
+            $hardwareVerified = $payload['hardware_verified'] ?? false;
+        }
+
         $request->session()->put('user', [
             'email' => $vouchUser->email,
-            'hardware_verified' => $vouchUser->user['hardware_verified'] ?? false,
+            'hardware_verified' => $hardwareVerified,
         ]);
 
         return redirect('/');

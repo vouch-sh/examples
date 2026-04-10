@@ -1,5 +1,10 @@
 import { useAuth } from 'react-oidc-context';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+function decodeAccessToken(token) {
+  return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+}
 
 function TokenInfo({ auth }) {
   const [timeLeft, setTimeLeft] = useState(null);
@@ -29,6 +34,10 @@ function TokenInfo({ auth }) {
 
 function UserProfile({ auth }) {
   const profile = auth.user?.profile;
+  const atClaims = useMemo(
+    () => auth.user?.access_token ? decodeAccessToken(auth.user.access_token) : {},
+    [auth.user?.access_token],
+  );
   if (!profile) return null;
 
   return (
@@ -40,9 +49,9 @@ function UserProfile({ auth }) {
         {profile.email_verified !== undefined && (
           <li><strong>email_verified:</strong> {String(profile.email_verified)}</li>
         )}
-        <li><strong>hardware_verified:</strong> {String(profile.hardware_verified || false)}</li>
-        {profile.hardware_aaguid && (
-          <li><strong>hardware_aaguid:</strong> {profile.hardware_aaguid}</li>
+        <li><strong>hardware_verified:</strong> {String(atClaims.hardware_verified || false)}</li>
+        {atClaims.hardware_aaguid && (
+          <li><strong>hardware_aaguid:</strong> {atClaims.hardware_aaguid}</li>
         )}
       </ul>
     </div>
@@ -76,7 +85,7 @@ export default function App() {
       {auth.isAuthenticated ? (
         <div>
           <p>Signed in as {auth.user?.profile.email}</p>
-          {auth.user?.profile.hardware_verified && (
+          {auth.user?.access_token && decodeAccessToken(auth.user.access_token).hardware_verified && (
             <p><strong>Hardware Verified</strong></p>
           )}
           <UserProfile auth={auth} />

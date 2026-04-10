@@ -1,3 +1,8 @@
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+function decodeAccessToken(token) {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+}
+
 const VOUCH_ISSUER = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const CLIENT_ID = process.env.VOUCH_CLIENT_ID;
 
@@ -58,12 +63,13 @@ async function deviceFlow() {
       console.log('Authenticated!');
       console.log(`Access token: ${tokens.access_token.slice(0, 20)}...`);
 
-      // Step 4: Fetch user info
+      // Step 4: Fetch user info and decode hardware claims from access token
       const userInfo = await fetchUserInfo(tokens.access_token);
+      const atClaims = decodeAccessToken(tokens.access_token);
       console.log(`Email: ${userInfo.email || 'N/A'}`);
-      console.log(`Hardware verified: ${userInfo.hardware_verified || false}`);
-      if (userInfo.hardware_aaguid) {
-        console.log(`Hardware AAGUID: ${userInfo.hardware_aaguid}`);
+      console.log(`Hardware verified: ${atClaims.hardware_verified || false}`);
+      if (atClaims.hardware_aaguid) {
+        console.log(`Hardware AAGUID: ${atClaims.hardware_aaguid}`);
       }
 
       // Step 5: Demonstrate post-auth API call with the access token

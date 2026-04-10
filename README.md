@@ -130,12 +130,14 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 
 ## Custom Claims
 
-Vouch ID tokens include these additional claims:
+Vouch access tokens ([RFC 9068](https://datatracker.ietf.org/doc/html/rfc9068) JWTs) include these additional claims:
 
 | Claim | Type | Description |
 |-------|------|-------------|
 | `hardware_verified` | boolean | Always `true` for Vouch sessions — confirms a hardware key was used |
 | `hardware_aaguid` | string | Identifies the authenticator hardware model |
+
+These claims are **not** in the OIDC id_token or userinfo response. Examples decode the access token JWT payload to read them.
 
 ## Security Considerations
 

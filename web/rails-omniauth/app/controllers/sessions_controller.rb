@@ -22,9 +22,21 @@ class SessionsController < ApplicationController
 
   def create
     auth = request.env['omniauth.auth']
+
+    # Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+    hardware_verified = false
+    access_token = auth.credentials&.token
+    if access_token
+      parts = access_token.split('.')
+      if parts.length == 3
+        payload = JSON.parse(Base64.urlsafe_decode64(parts[1]))
+        hardware_verified = payload['hardware_verified'] || false
+      end
+    end
+
     session[:user] = {
       'email' => auth.info.email,
-      'hardware_verified' => auth.extra.raw_info&.hardware_verified
+      'hardware_verified' => hardware_verified
     }
     redirect_to root_path
   end

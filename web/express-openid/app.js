@@ -17,6 +17,12 @@ app.use(session({
   saveUninitialized: false,
 }));
 
+// Hardware claims (hardware_verified, hardware_aaguid) are in the
+// access token JWT (RFC 9068), not the OIDC id_token.
+function decodeAccessToken(token) {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+}
+
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     return res.status(401).send('Not authenticated. <a href="/">Go home</a>');
@@ -94,11 +100,12 @@ app.get('/auth/vouch/callback', async (req, res) => {
     });
 
     const claims = tokens.claims();
+    const atClaims = decodeAccessToken(tokens.access_token);
     req.session.user = {
       id: claims.sub,
       email: claims.email,
-      hardwareVerified: claims.hardware_verified || false,
-      hardwareAaguid: claims.hardware_aaguid || null,
+      hardwareVerified: atClaims.hardware_verified || false,
+      hardwareAaguid: atClaims.hardware_aaguid || null,
     };
 
     req.session.tokens = {

@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -19,6 +21,13 @@ oauth.register(
     client_kwargs={'scope': 'openid email'},
     code_challenge_method='S256',
 )
+
+def decode_access_token(token):
+    """Hardware claims are in the access token JWT (RFC 9068), not the id_token."""
+    payload = token.split('.')[1]
+    payload += '=' * (4 - len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload))
+
 
 TEMPLATE = """
 <!DOCTYPE html>
@@ -54,9 +63,10 @@ async def login(request: Request):
 async def callback(request: Request):
     token = await oauth.vouch.authorize_access_token(request)
     userinfo = token.get('userinfo')
+    at_claims = decode_access_token(token['access_token'])
     request.session['user'] = {
         'email': userinfo.get('email'),
-        'hardware_verified': userinfo.get('hardware_verified', False),
+        'hardware_verified': at_claims.get('hardware_verified', False),
     }
     return RedirectResponse(url='/')
 

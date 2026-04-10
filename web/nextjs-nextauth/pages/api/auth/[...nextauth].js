@@ -1,5 +1,10 @@
 import NextAuth from 'next-auth';
 
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+function decodeAccessToken(token) {
+  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+}
+
 export default NextAuth({
   providers: [{
     id: 'vouch',
@@ -15,16 +20,15 @@ export default NextAuth({
       return {
         id: profile.sub,
         email: profile.email,
-        hardwareVerified: profile.hardware_verified,
-        hardwareAaguid: profile.hardware_aaguid,
       };
     },
   }],
   callbacks: {
-    async jwt({ token, profile }) {
-      if (profile) {
-        token.hardwareVerified = profile.hardware_verified;
-        token.hardwareAaguid = profile.hardware_aaguid;
+    async jwt({ token, account }) {
+      if (account?.access_token) {
+        const atClaims = decodeAccessToken(account.access_token);
+        token.hardwareVerified = atClaims.hardware_verified || false;
+        token.hardwareAaguid = atClaims.hardware_aaguid || null;
       }
       return token;
     },

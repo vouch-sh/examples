@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import sys
 import time
@@ -9,6 +11,13 @@ CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
 if not CLIENT_ID:
     print('Error: VOUCH_CLIENT_ID environment variable is required')
     sys.exit(1)
+
+
+def decode_access_token(token):
+    """Hardware claims are in the access token JWT (RFC 9068), not the id_token."""
+    payload = token.split('.')[1]
+    payload += '=' * (4 - len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload))
 
 
 def fetch_userinfo(access_token):
@@ -55,12 +64,13 @@ while True:
         print("Authenticated!")
         print(f"Access token: {tokens['access_token'][:20]}...")
 
-        # Step 4: Fetch user info
+        # Step 4: Fetch user info and decode hardware claims from access token
         userinfo = fetch_userinfo(tokens['access_token'])
+        at_claims = decode_access_token(tokens['access_token'])
         print(f"Email: {userinfo.get('email', 'N/A')}")
-        print(f"Hardware verified: {userinfo.get('hardware_verified', False)}")
-        if userinfo.get('hardware_aaguid'):
-            print(f"Hardware AAGUID: {userinfo['hardware_aaguid']}")
+        print(f"Hardware verified: {at_claims.get('hardware_verified', False)}")
+        if at_claims.get('hardware_aaguid'):
+            print(f"Hardware AAGUID: {at_claims['hardware_aaguid']}")
 
         # Step 5: Demonstrate post-auth API call with the access token
         print("\n--- Post-auth API call ---")

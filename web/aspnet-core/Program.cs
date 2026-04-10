@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -32,6 +34,8 @@ builder.Services.AddAuthentication(options =>
     options.SaveTokens = true;
     options.GetClaimsFromUserInfoEndpoint = true;
     options.CallbackPath = new PathString(new Uri(redirectUri).AbsolutePath);
+    options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
+    options.ResponseMode = OpenIdConnectResponseMode.Query;
     options.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
     {
         OnRedirectToIdentityProvider = context =>
@@ -40,9 +44,6 @@ builder.Services.AddAuthentication(options =>
             return System.Threading.Tasks.Task.CompletedTask;
         },
     };
-
-    options.ClaimActions.MapJsonKey("hardware_verified", "hardware_verified");
-    options.ClaimActions.MapJsonKey("hardware_aaguid", "hardware_aaguid");
 });
 
 builder.Services.AddAuthorization();
@@ -52,15 +53,31 @@ var app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/", (HttpContext context) =>
+// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
+static bool DecodeHardwareVerified(string? accessToken)
+{
+    if (string.IsNullOrEmpty(accessToken)) return false;
+    var parts = accessToken.Split('.');
+    if (parts.Length != 3) return false;
+    try
+    {
+        var payload = parts[1].Replace('-', '+').Replace('_', '/');
+        payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+        var json = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
+        return json.RootElement.TryGetProperty("hardware_verified", out var hw) && hw.GetBoolean();
+    }
+    catch { return false; }
+}
+
+app.MapGet("/", async (HttpContext context) =>
 {
     if (context.User.Identity?.IsAuthenticated == true)
     {
         var email = context.User.FindFirst("email")?.Value
             ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
             ?? "unknown";
-        var hwVerified = context.User.FindFirst("hardware_verified")?.Value == "true"
-            || context.User.FindFirst("hardware_verified")?.Value == "True";
+        var accessToken = await context.GetTokenAsync("access_token");
+        var hwVerified = DecodeHardwareVerified(accessToken);
         var hwBadge = hwVerified ? "<p><strong>Hardware Verified</strong></p>" : "";
 
         return Results.Content(

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.7"
+base64 = "0.22"
 axum-extra = { version = "0.9", features = ["cookie"] }
 openidconnect = "3"
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
