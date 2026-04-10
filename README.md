@@ -3,7 +3,7 @@
 [![CI](https://github.com/vouch-sh/examples/actions/workflows/ci.yml/badge.svg)](https://github.com/vouch-sh/examples/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-27 deployable examples for integrating with [Vouch](https://vouch.sh) as an OIDC provider across 9 languages and 5 categories. Each example is a minimal, self-contained application with a Dockerfile.
+31 deployable examples for integrating with [Vouch](https://vouch.sh) as an OIDC provider across 9 languages and 6 categories. Each example is a minimal, self-contained application with a Dockerfile.
 
 ## Prerequisites
 
@@ -68,6 +68,17 @@ Secure AI agent communication using Vouch for hardware-backed authentication.
 | MCP Credential Broker (Python) | [`mcp/credential-broker`](mcp/credential-broker) | MCP server that brokers AWS, GitHub, and SSH credentials on behalf of the authenticated user |
 | A2A Agent (Python) | [`a2a/python-agent`](a2a/python-agent) | [Agent-to-Agent](https://github.com/a2aproject/A2A) agent with OpenID Connect security scheme in the Agent Card |
 
+### SPIFFE Workload Identity
+
+Workload-to-workload authentication using [SPIFFE](https://spiffe.io) identities with Vouch OIDC bridge support.
+
+| Pattern | Directory | Language |
+|---------|-----------|----------|
+| mTLS + Vouch user auth | [`spiffe/go-mtls`](spiffe/go-mtls) | Go |
+| JWT-SVID + Vouch dual auth | [`spiffe/python-jwt`](spiffe/python-jwt) | Python |
+| mTLS + Vouch user auth | [`spiffe/rust-mtls`](spiffe/rust-mtls) | Rust |
+| OIDC Federation (SPIRE + Vouch) | [`spiffe/oidc-federation`](spiffe/oidc-federation) | Python |
+
 ## Quick Start
 
 Every example follows the same pattern:
@@ -98,6 +109,8 @@ docker run -p 3000:3000 \
 | `VOUCH_CLIENT_ID` | Yes | OAuth client ID from your Vouch application |
 | `VOUCH_CLIENT_SECRET` | Web only | OAuth client secret (not needed for SPA or native apps) |
 | `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL (e.g., `http://localhost:3000/callback`) |
+| `SPIFFE_ENDPOINT_SOCKET` | SPIFFE only | SPIFFE Workload API socket (e.g., `unix:///tmp/spire-agent/api.sock`) |
+| `SPIRE_OIDC_ISSUER` | OIDC Federation only | SPIRE OIDC discovery provider URL |
 
 ## OIDC Endpoints
 
@@ -127,6 +140,8 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 | Credential brokering (AWS) | [`native/python-agent-aws`](native/python-agent-aws), [`native/python-agent-multi`](native/python-agent-multi), [`mcp/credential-broker`](mcp/credential-broker) |
 | Credential brokering (GitHub) | [`native/python-agent-github`](native/python-agent-github), [`native/python-agent-multi`](native/python-agent-multi), [`mcp/credential-broker`](mcp/credential-broker) |
 | Credential brokering (SSH) | [`native/python-agent-multi`](native/python-agent-multi), [`mcp/credential-broker`](mcp/credential-broker) |
+| SPIFFE mTLS + Vouch user auth | [`spiffe/go-mtls`](spiffe/go-mtls), [`spiffe/rust-mtls`](spiffe/rust-mtls) |
+| Dual-issuer JWT validation | [`spiffe/python-jwt`](spiffe/python-jwt), [`spiffe/oidc-federation`](spiffe/oidc-federation) |
 
 ## Custom Claims
 

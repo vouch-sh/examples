@@ -1,0 +1,17 @@
+[package]
+name = "vouch-spiffe-mtls"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spiffe = { version = "0.12", features = ["x509-source"] }
+spiffe-rustls = "0.4"
+spiffe-rustls-tokio = "0.1"
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
+http-body-util = "0.1"
+jsonwebtoken = "10"
+reqwest = { version = "0.13", features = ["rustls", "json"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

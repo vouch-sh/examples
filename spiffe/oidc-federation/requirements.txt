@@ -1,0 +1,5 @@
+flask>=3.1
+spiffe>=0.2
+PyJWT>=2.12
+cryptography>=46.0
+requests>=2.33

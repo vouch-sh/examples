@@ -15,6 +15,7 @@ Examples are organized by client type:
 - **`native/`** — CLI/terminal apps (public clients, Device Authorization Grant / RFC 8628). 3 examples: Node.js, Python, Rust.
 - **`mcp/`** — Model Context Protocol servers with bearer token auth + RFC 9728 Protected Resource Metadata. TypeScript and Python.
 - **`a2a/`** — Agent-to-Agent protocol with OIDC security scheme in the Agent Card. Python.
+- **`spiffe/`** — SPIFFE workload identity with Vouch OIDC bridge (mTLS, JWT-SVID, OIDC federation). Go, Python, Rust.
 
 ## Build and Run
 
@@ -39,7 +40,7 @@ GitHub Actions (`.github/workflows/ci.yml`) builds all 22 Dockerfiles on push/PR
 
 ## Adding a New Example
 
-1. Create a directory under the appropriate category (`web/`, `spa/`, `native/`, `mcp/`, `a2a/`).
+1. Create a directory under the appropriate category (`web/`, `spa/`, `native/`, `mcp/`, `a2a/`, `spiffe/`).
 2. Include a `Dockerfile` that exposes port 3000 and reads `VOUCH_ISSUER`, `VOUCH_CLIENT_ID`, and (if applicable) `VOUCH_CLIENT_SECRET` / `VOUCH_REDIRECT_URI` from environment variables.
 3. Add a `README.md` following the style of existing examples.
 4. Add the directory to the matrix in `.github/workflows/ci.yml`.
@@ -54,6 +55,8 @@ GitHub Actions (`.github/workflows/ci.yml`) builds all 22 Dockerfiles on push/PR
 | `VOUCH_CLIENT_ID` | All | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Web only | OAuth client secret |
 | `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL |
+| `SPIFFE_ENDPOINT_SOCKET` | SPIFFE only | SPIFFE Workload API socket |
+| `SPIRE_OIDC_ISSUER` | OIDC Federation only | SPIRE OIDC discovery provider URL |
 
 ## Dependency Management
 

@@ -30,6 +30,8 @@ updates:
   - package-ecosystem: "pip"
     directories:
       - "/a2a/python-agent"
+      - "/spiffe/oidc-federation"
+      - "/spiffe/python-jwt"
       - "/mcp/credential-broker"
       - "/mcp/remote-server-py"
       - "/native/python"
@@ -54,6 +56,10 @@ updates:
       - "/native/python-agent-github"
       - "/native/python-agent-multi"
       - "/native/rust"
+      - "/spiffe/go-mtls"
+      - "/spiffe/oidc-federation"
+      - "/spiffe/python-jwt"
+      - "/spiffe/rust-mtls"
       - "/spa/angular"
       - "/spa/bff-express"
       - "/spa/react"
@@ -76,6 +82,7 @@ updates:
 
   - package-ecosystem: "gomod"
     directories:
+      - "/spiffe/go-mtls"
       - "/web/go-oidc"
     patterns: ["*"]
     multi-ecosystem-group: "all"
@@ -83,6 +90,7 @@ updates:
   - package-ecosystem: "cargo"
     directories:
       - "/native/rust"
+      - "/spiffe/rust-mtls"
       - "/web/axum-openidconnect"
     patterns: ["*"]
     multi-ecosystem-group: "all"
