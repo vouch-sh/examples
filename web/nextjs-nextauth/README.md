@@ -43,5 +43,6 @@ http://localhost:3000/api/auth/callback/vouch
 
 ## Notes
 
+- This example uses NextAuth.js v4, which is in maintenance mode. The NextAuth.js project has been transferred to [Better Auth](https://better-auth.com). For new production applications, consider using Better Auth with its [generic OAuth plugin](https://better-auth.com/docs/plugins/generic-oauth). This example remains on v4 because its JWT-based sessions require no database, keeping the Docker setup minimal.
 - `NEXTAUTH_URL` must be set in production to the canonical URL of your deployment (e.g. `https://app.example.com`). In local development Next.js infers it automatically.
 - `NEXTAUTH_SECRET` should be a strong random value in production. A default development-only secret is used if unset.

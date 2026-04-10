@@ -5,77 +5,52 @@ use axum::{
     Router,
 };
 use openidconnect::{
-    core::{
-        CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim,
-        CoreJsonWebKey, CoreJsonWebKeyType, CoreJsonWebKeyUse,
-        CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
-        CoreResponseType, CoreRevocableToken, CoreTokenType,
-    },
-    AdditionalClaims, AuthenticationFlow, AuthorizationCode, Client, ClientId,
-    ClientSecret, CsrfToken, EmptyExtraTokenFields, IdTokenFields, IssuerUrl, Nonce,
-    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RevocationErrorResponseType, Scope,
-    StandardErrorResponse, StandardTokenIntrospectionResponse, StandardTokenResponse,
-    TokenResponse, reqwest::async_http_client,
+    core::{CoreClient, CoreProviderMetadata, CoreResponseType},
+    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
+    EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce,
+    OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
+    TokenResponse,
 };
 use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_sessions::{MemoryStore, Session, SessionManagerLayer};
 
-// Additional claims placeholder (hardware claims are read from the access token JWT).
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct VouchClaims {}
-
-impl AdditionalClaims for VouchClaims {}
-
-type VouchIdTokenFields = IdTokenFields<
-    VouchClaims,
-    EmptyExtraTokenFields,
-    CoreGenderClaim,
-    CoreJweContentEncryptionAlgorithm,
-    CoreJwsSigningAlgorithm,
-    CoreJsonWebKeyType,
->;
-
-type VouchClient = Client<
-    VouchClaims,
-    CoreAuthDisplay,
-    CoreGenderClaim,
-    CoreJweContentEncryptionAlgorithm,
-    CoreJwsSigningAlgorithm,
-    CoreJsonWebKeyType,
-    CoreJsonWebKeyUse,
-    CoreJsonWebKey,
-    CoreAuthPrompt,
-    StandardErrorResponse<CoreErrorResponseType>,
-    StandardTokenResponse<VouchIdTokenFields, CoreTokenType>,
-    CoreTokenType,
-    StandardTokenIntrospectionResponse<EmptyExtraTokenFields, CoreTokenType>,
-    CoreRevocableToken,
-    StandardErrorResponse<RevocationErrorResponseType>,
+type ConfiguredClient = CoreClient<
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
 >;
 
 #[derive(Clone)]
 struct AppState {
-    client: VouchClient,
+    oidc_client: ConfiguredClient,
+    http_client: reqwest::Client,
     // In production, use a proper session store
     pkce_verifiers: Arc<RwLock<std::collections::HashMap<String, (PkceCodeVerifier, Nonce)>>>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let http_client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+
     let issuer_url = IssuerUrl::new(
         std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string()),
     )?;
 
     let provider_metadata =
-        CoreProviderMetadata::discover_async(issuer_url, async_http_client).await?;
+        CoreProviderMetadata::discover_async(issuer_url, &http_client).await?;
 
     let redirect_uri = std::env::var("VOUCH_REDIRECT_URI")
         .unwrap_or_else(|_| "http://localhost:3000/callback".to_string());
 
-    let client = VouchClient::from_provider_metadata(
+    let oidc_client = CoreClient::from_provider_metadata(
         provider_metadata,
         ClientId::new(std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID must be set")),
         Some(ClientSecret::new(
@@ -85,7 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
 
     let state = AppState {
-        client,
+        oidc_client,
+        http_client,
         pkce_verifiers: Arc::new(RwLock::new(std::collections::HashMap::new())),
     };
 
@@ -134,7 +110,7 @@ async fn login(State(state): State<AppState>) -> Redirect {
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, csrf_token, nonce) = state
-        .client
+        .oidc_client
         .authorize_url(
             AuthenticationFlow::<CoreResponseType>::AuthorizationCode,
             CsrfToken::new_random,
@@ -168,11 +144,17 @@ async fn callback(
         None => return Redirect::to("/").into_response(),
     };
 
-    let token_response = match state
-        .client
+    let code_request = match state
+        .oidc_client
         .exchange_code(AuthorizationCode::new(params.code))
+    {
+        Ok(req) => req,
+        Err(_) => return Redirect::to("/").into_response(),
+    };
+
+    let token_response = match code_request
         .set_pkce_verifier(pkce_verifier)
-        .request_async(async_http_client)
+        .request_async(&state.http_client)
         .await
     {
         Ok(t) => t,
@@ -184,7 +166,7 @@ async fn callback(
         None => return Redirect::to("/").into_response(),
     };
 
-    let claims = match id_token.claims(&state.client.id_token_verifier(), &nonce) {
+    let claims = match id_token.claims(&state.oidc_client.id_token_verifier(), &nonce) {
         Ok(c) => c,
         Err(_) => return Redirect::to("/").into_response(),
     };
@@ -195,19 +177,17 @@ async fn callback(
         .unwrap_or_default();
 
     // Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-    // Extract via serialization since the TokenResponse trait's access_token()
-    // method is shadowed by a private field in StandardTokenResponse.
-    let hardware_verified = serde_json::to_value(&token_response)
-        .ok()
-        .and_then(|v| v["access_token"].as_str().map(String::from))
-        .and_then(|at| {
-            at.split('.').nth(1).and_then(|p| {
-                URL_SAFE_NO_PAD
-                    .decode(p)
-                    .ok()
-                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-                    .and_then(|v| v["hardware_verified"].as_bool())
-            })
+    let hardware_verified = token_response
+        .access_token()
+        .secret()
+        .split('.')
+        .nth(1)
+        .and_then(|p| {
+            URL_SAFE_NO_PAD
+                .decode(p)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                .and_then(|v| v["hardware_verified"].as_bool())
         })
         .unwrap_or(false);
 
