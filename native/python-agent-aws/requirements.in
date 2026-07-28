@@ -1,2 +1,2 @@
-requests>=2.32
-boto3>=1.38
+requests>=2.34
+boto3>=1.43

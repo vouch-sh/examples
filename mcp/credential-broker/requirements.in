@@ -1,6 +1,6 @@
 mcp>=1.12.0,<2
-uvicorn>=0.40
-PyJWT>=2.11
-cryptography>=46.0
-pydantic>=2.0
+uvicorn>=0.51
+PyJWT>=2.13
+cryptography>=49.0
+pydantic>=2.13
 httpx>=0.28
