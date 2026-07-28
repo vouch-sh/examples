@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y unzip git libzip-dev && \
     docker-php-ext-install zip && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.9 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 

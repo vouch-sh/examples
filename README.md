@@ -146,6 +146,27 @@ Vouch access tokens ([RFC 9068](https://datatracker.ietf.org/doc/html/rfc9068) J
 
 These claims are **not** in the OIDC id_token or userinfo response. Examples decode the access token JWT payload to read them.
 
+## Testing
+
+Every example is smoke-tested in CI: the image is built, started, and probed to confirm it
+actually serves. This needs no Vouch account and can be run locally:
+
+```bash
+docker build -t my-example web/express-openid
+scripts/smoke.sh web/express-openid my-example
+```
+
+A full end-to-end Playwright suite lives in [`tests/`](tests) and drives real browser login
+flows against Vouch. It requires a live Vouch CLI session and creates temporary OAuth
+applications, so it runs locally rather than in CI:
+
+```bash
+make install
+make test          # all examples
+make test-web      # or: test-spa, test-native, test-mcp, test-a2a, test-claims
+make report        # open the last HTML report
+```
+
 ## Security Considerations
 
 These examples are demonstrations, not production-ready applications. For production browser-based apps, consider using the Backend-for-Frontend (BFF) pattern ([`spa/bff-express`](spa/bff-express)) where tokens stay on the server and the browser only receives HttpOnly session cookies. See the [IETF OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps) draft for recommendations.

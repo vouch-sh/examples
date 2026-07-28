@@ -1,4 +1,4 @@
-FROM rust:1.94-slim-trixie AS build
+FROM rust:1.97-slim-trixie AS build
 
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 

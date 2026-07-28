@@ -1,4 +1,4 @@
-FROM node:25-trixie-slim AS build
+FROM node:26-trixie-slim AS build
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 RUN npx ng build --configuration production
 
-FROM nginx:alpine
+FROM nginx:1.31-alpine
 
 COPY --from=build /app/dist/vouch-angular-spa/browser /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

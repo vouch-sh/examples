@@ -38,7 +38,16 @@ SPA examples omit `VOUCH_CLIENT_SECRET`. Native examples omit both `VOUCH_CLIENT
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) builds all 27 Dockerfiles on push/PR to `main` using a matrix strategy with `docker/build-push-action` and GitHub Actions cache.
+GitHub Actions (`.github/workflows/ci.yml`) builds all 27 Dockerfiles on push/PR to `main` using a matrix strategy with `docker/build-push-action` and GitHub Actions cache, then **starts each image and checks it serves** via `scripts/smoke.sh`.
+
+The smoke step matters more than the build. A build succeeds even when dependencies resolved to a breaking major — the failure only appears when the process starts. Run it locally the same way CI does:
+
+```bash
+docker build -t my-example web/express-openid
+scripts/smoke.sh web/express-openid my-example
+```
+
+It uses throwaway credentials and needs no Vouch account. Probes are chosen per category: web apps must render `/`; static SPAs must render `/` **and** have their `__VOUCH_*` placeholders substituted into the built bundle (`entrypoint.sh` exits 0 even when its `sed` glob matches nothing, so this is the only thing catching a bundler output-layout change); MCP and A2A servers must serve their well-known metadata and reject unauthenticated calls with 401; native CLIs must get past module loading.
 
 A Playwright end-to-end suite lives in `tests/` (specs for web, spa, native, mcp, a2a) and is driven by the root `Makefile` (`make test`, `make test-mcp`, …). It is **not** wired into CI: it shells out to the macOS Keychain for a DPoP signing key, needs a live hardware-key-backed Vouch session (`~/.vouch/cookie.txt`), and creates/destroys real OAuth applications. Run it locally before merging anything non-trivial.
 
@@ -51,8 +60,9 @@ A Playwright end-to-end suite lives in `tests/` (specs for web, spa, native, mcp
 5. Add a `README.md` following the style of existing examples.
 6. Add the directory to the matrix in `.github/workflows/ci.yml`.
 7. Add a Dependabot entry in `.github/dependabot.yml` — **two entries**: one for the language ecosystem and one under `docker`. Every example appears in the docker list.
-8. Update the table in the root `README.md`.
-9. Register the example for end-to-end tests: add it to `tests/src/examples.js`, and if it needs a new spec, add one under `tests/tests/` plus a script in `tests/package.json` and a target in the root `Makefile`.
+8. Confirm `scripts/smoke.sh <dir>` passes. If the example does not match an existing category, add a case for it.
+9. Update the table in the root `README.md`.
+10. Register the example for end-to-end tests: add it to `tests/src/examples.js`, and if it needs a new spec, add one under `tests/tests/` plus a script in `tests/package.json` and a target in the root `Makefile`.
 
 ## Environment Variables
 
