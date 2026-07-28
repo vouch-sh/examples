@@ -1,12 +1,12 @@
 import os
 import json
-import contextvars
 import xml.etree.ElementTree as ET
 import jwt
 import httpx
 from jwt import PyJWKClient
 from pydantic import AnyHttpUrl
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 
@@ -15,10 +15,6 @@ PORT = int(os.environ.get('PORT', '3000'))
 
 # JWKS client for token verification
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
-
-# Store authenticated claims and raw token per-request
-_current_claims = contextvars.ContextVar('current_claims', default=None)
-_current_token = contextvars.ContextVar('current_token', default=None)
 
 AWS_STS_NS = '{https://sts.amazonaws.com/doc/2011-06-15/}'
 
@@ -51,8 +47,6 @@ class VouchTokenVerifier(TokenVerifier):
                 # valid Vouch access token, which is weaker than remote-server-py.
                 options={'verify_aud': False},
             )
-            _current_claims.set(payload)
-            _current_token.set(token)
             return AccessToken(
                 token=token,
                 client_id=payload.get('sub'),
@@ -61,17 +55,23 @@ class VouchTokenVerifier(TokenVerifier):
                     if isinstance(payload.get('scope'), str)
                     else []
                 ),
+                # Carrying the verified claims here means tools read them through the
+                # SDK's own per-request auth context rather than a side channel.
+                claims=payload,
             )
         except Exception:
             return None
 
 
+def authenticated_token() -> str | None:
+    """Raw bearer token for the current request, or None if unauthenticated."""
+    access_token = get_access_token()
+    return access_token.token if access_token else None
+
+
 # Create MCP server with built-in auth and RFC 9728 metadata
-mcp = FastMCP(
+mcp = MCPServer(
     'vouch-credential-broker',
-    host='0.0.0.0',
-    port=PORT,
-    json_response=True,
     token_verifier=VouchTokenVerifier(),
     auth=AuthSettings(
         issuer_url=AnyHttpUrl(VOUCH_ISSUER),
@@ -87,7 +87,7 @@ async def get_aws_credentials(role_arn: str) -> str:
 
     First obtains an AWS-specific ID token from Vouch, then exchanges it
     with AWS STS AssumeRoleWithWebIdentity for temporary credentials."""
-    token = _current_token.get()
+    token = authenticated_token()
     if not token:
         return json.dumps({'error': 'No authentication context'}, indent=2)
 
@@ -155,7 +155,7 @@ async def get_github_token(
 ) -> str:
     """Get a GitHub installation token scoped to the user's identity
     via Vouch."""
-    token = _current_token.get()
+    token = authenticated_token()
     if not token:
         return json.dumps({'error': 'No authentication context'}, indent=2)
 
@@ -186,7 +186,7 @@ async def get_github_token(
 async def get_ssh_certificate(public_key: str) -> str:
     """Sign an SSH public key with a Vouch-issued certificate for the
     authenticated user."""
-    token = _current_token.get()
+    token = authenticated_token()
     if not token:
         return json.dumps({'error': 'No authentication context'}, indent=2)
 
@@ -214,4 +214,5 @@ if __name__ == '__main__':
         f'http://localhost:{PORT}/.well-known/oauth-protected-resource'
     )
     print(f'MCP endpoint: http://localhost:{PORT}/mcp')
-    mcp.run(transport='streamable-http')
+    # Transport options moved from the constructor to run() in the 2.0 SDK.
+    mcp.run(transport='streamable-http', host='0.0.0.0', port=PORT, json_response=True)

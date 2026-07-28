@@ -1,10 +1,10 @@
 import os
 import json
-import contextvars
 import jwt
 from jwt import PyJWKClient
 from pydantic import AnyHttpUrl
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 
@@ -19,15 +19,16 @@ RESOURCE = os.environ.get('VOUCH_AUDIENCE', f'http://localhost:{PORT}')
 # JWKS client for token verification
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
-# Store authenticated claims per-request for tool handlers
-_current_claims = contextvars.ContextVar('current_claims', default=None)
-
 
 class VouchTokenVerifier(TokenVerifier):
     """Verify Vouch OIDC JWT tokens using JWKS."""
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
+            # RFC 9068 access tokens carry `typ: at+jwt`. Requiring it rejects ID
+            # tokens, which are not bearer credentials no matter whose they are.
+            if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
+                return None
             signing_key = jwks_client.get_signing_key_from_jwt(token)
             payload = jwt.decode(
                 token,
@@ -39,26 +40,27 @@ class VouchTokenVerifier(TokenVerifier):
                 # this resource (RFC 8707) so `aud` is narrowed to us.
                 audience=RESOURCE,
             )
-            # RFC 9068 access tokens carry `typ: at+jwt`. Requiring it rejects ID
-            # tokens, which are not bearer credentials no matter whose they are.
-            if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
-                return None
-            _current_claims.set(payload)
             return AccessToken(
                 token=token,
                 client_id=payload.get('sub'),
                 scopes=payload.get('scope', '').split() if isinstance(payload.get('scope'), str) else [],
+                # Carrying the verified claims here means tools read them through the
+                # SDK's own per-request auth context rather than a side channel.
+                claims=payload,
             )
         except Exception:
             return None
 
 
+def authenticated_claims() -> dict:
+    """Verified claims for the current request, or {} if unauthenticated."""
+    access_token = get_access_token()
+    return access_token.claims if access_token else {}
+
+
 # Create MCP server with built-in auth and RFC 9728 metadata
-mcp = FastMCP(
+mcp = MCPServer(
     'vouch-example',
-    host='0.0.0.0',
-    port=PORT,
-    json_response=True,
     token_verifier=VouchTokenVerifier(),
     auth=AuthSettings(
         issuer_url=AnyHttpUrl(VOUCH_ISSUER),
@@ -71,7 +73,7 @@ mcp = FastMCP(
 @mcp.tool()
 async def whoami() -> str:
     """Returns the authenticated user info from the Vouch OIDC token."""
-    claims = _current_claims.get()
+    claims = authenticated_claims()
     if claims:
         return json.dumps({
             'email': claims.get('email', 'unknown'),
@@ -86,8 +88,8 @@ async def whoami() -> str:
 @mcp.tool(name='sensitive-action')
 async def sensitive_action() -> str:
     """Performs a sensitive action that requires hardware key verification."""
-    claims = _current_claims.get()
-    if not claims or not claims.get('hardware_verified', False):
+    claims = authenticated_claims()
+    if not claims.get('hardware_verified', False):
         return json.dumps({
             'error': 'hardware_key_required',
             'message': (
@@ -107,4 +109,5 @@ if __name__ == '__main__':
     print(f'MCP server running on http://localhost:{PORT}')
     print(f'Protected Resource Metadata: http://localhost:{PORT}/.well-known/oauth-protected-resource')
     print(f'MCP endpoint: http://localhost:{PORT}/mcp')
-    mcp.run(transport='streamable-http')
+    # Transport options moved from the constructor to run() in the 2.0 SDK.
+    mcp.run(transport='streamable-http', host='0.0.0.0', port=PORT, json_response=True)
