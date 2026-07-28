@@ -165,9 +165,34 @@ test("hardware claims are present in the access token", async ({ browser }) => {
   console.log("access_token hardware_verified:", at.hardware_verified);
   console.log("access_token hardware_aaguid:", at.hardware_aaguid);
   console.log("id_token   hardware_verified:", idt.hardware_verified);
-  console.log("id_token   acr:", idt.acr, " amr:", JSON.stringify(idt.amr));
 
   expect(at.hardware_verified).toBe(true);
+
+  // hardware_aaguid is documented in the root README and rendered by several examples,
+  // but Vouch does not actually issue it. Flag it if that ever changes so the docs and
+  // the examples can be brought back in line.
+  expect(
+    at.hardware_aaguid,
+    "hardware_aaguid is now issued — update the README and the examples that render it",
+  ).toBeUndefined();
+});
+
+test("acr and amr carry the hardware signal without being requested", async ({ browser }) => {
+  const tokens = await tokensFor(browser);
+  const at = decodeJwt(tokens.access_token).payload;
+  const idt = decodeJwt(tokens.id_token).payload;
+
+  console.log("access_token acr:", at.acr, " amr:", JSON.stringify(at.amr));
+  console.log("id_token     acr:", idt.acr, " amr:", JSON.stringify(idt.amr));
+
+  // These are the standards-defined equivalents of `hardware_verified`, they are the
+  // claims Vouch actually advertises in `claims_supported`, and they arrive on both
+  // tokens with no `acr_values` request. `amr: hwk` is RFC 8176 for "proof-of-possession
+  // of a hardware-secured key".
+  for (const claims of [at, idt]) {
+    expect(claims.acr).toBe(AAL3);
+    expect(claims.amr).toContain("hwk");
+  }
 });
 
 test("RFC 8707 resource indicator narrows the audience", async ({ browser }) => {
@@ -217,4 +242,8 @@ test("introspection reports hardware_verified", async ({ browser }) => {
   const body = await res.json();
   console.log("introspection:", JSON.stringify(body));
   expect(body.active).toBe(true);
+
+  // Introspection does NOT surface hardware_verified, so it is not a substitute for
+  // verifying the access token: RFC 9068 verification is the only route to that claim.
+  expect(body.hardware_verified).toBeUndefined();
 });
