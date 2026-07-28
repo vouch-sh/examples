@@ -30,3 +30,6 @@ obj/
 bin/
 tests/playwright-report/
 tests/test-results/
+# Go build output
+web/go-oidc/go-oidc
+web/go-oidc/server

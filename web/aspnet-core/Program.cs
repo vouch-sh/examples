@@ -1,10 +1,11 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,20 +54,34 @@ var app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-static bool DecodeHardwareVerified(string? accessToken)
+// hardware_verified is only in the access token, not the id_token. The access token is
+// an ES256-signed RFC 9068 JWT, so verify it against the issuer's published JWKS rather
+// than decoding the payload -- an unverified decode trusts whatever bytes you were
+// handed. The configuration manager caches and refreshes the signing keys.
+var configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+    $"{vouchIssuer}/.well-known/openid-configuration",
+    new OpenIdConnectConfigurationRetriever());
+
+var tokenHandler = new JsonWebTokenHandler();
+
+async Task<JsonWebToken?> VerifyAccessTokenAsync(string? accessToken)
 {
-    if (string.IsNullOrEmpty(accessToken)) return false;
-    var parts = accessToken.Split('.');
-    if (parts.Length != 3) return false;
-    try
+    if (string.IsNullOrEmpty(accessToken)) return null;
+
+    var oidcConfig = await configManager.GetConfigurationAsync();
+    var result = await tokenHandler.ValidateTokenAsync(accessToken, new TokenValidationParameters
     {
-        var payload = parts[1].Replace('-', '+').Replace('_', '/');
-        payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
-        var json = JsonDocument.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
-        return json.RootElement.TryGetProperty("hardware_verified", out var hw) && hw.GetBoolean();
-    }
-    catch { return false; }
+        ValidIssuer = vouchIssuer,
+        // The audience is this client's own client_id, which is what Vouch issues when
+        // the authorization request carries no RFC 8707 resource parameter.
+        ValidAudience = clientId,
+        IssuerSigningKeys = oidcConfig.SigningKeys,
+        // RFC 9068 access tokens carry typ: at+jwt. Requiring it rejects id_tokens,
+        // which are not bearer credentials.
+        ValidTypes = new[] { "at+jwt" },
+    });
+
+    return result.IsValid ? (JsonWebToken)result.SecurityToken : null;
 }
 
 app.MapGet("/", async (HttpContext context) =>
@@ -77,7 +92,9 @@ app.MapGet("/", async (HttpContext context) =>
             ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
             ?? "unknown";
         var accessToken = await context.GetTokenAsync("access_token");
-        var hwVerified = DecodeHardwareVerified(accessToken);
+        var verified = await VerifyAccessTokenAsync(accessToken);
+        var hwVerified = verified is not null
+            && verified.TryGetPayloadValue<bool>("hardware_verified", out var hw) && hw;
         var hwBadge = hwVerified ? "<p><strong>Hardware Verified</strong></p>" : "";
 
         return Results.Content(

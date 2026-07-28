@@ -21,5 +21,5 @@ docker run -it \
 
 ## Advanced Features
 
-- **UserInfo + profile enrichment** — Fetches `email` from the UserInfo endpoint and decodes `hardware_verified` and `hardware_aaguid` from the access token JWT
+- **UserInfo + profile enrichment** — Fetches `email` from the UserInfo endpoint and reads `hardware_verified`, `acr` and `amr` from the access token after verifying it against JWKS
 - **Post-auth API call** — Makes a second UserInfo call to demonstrate using the access token for subsequent API requests

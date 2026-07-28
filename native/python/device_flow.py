@@ -1,9 +1,10 @@
-import base64
-import json
 import os
 import sys
 import time
+
+import jwt
 import requests
+from jwt import PyJWKClient
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
@@ -13,11 +14,26 @@ if not CLIENT_ID:
     sys.exit(1)
 
 
-def decode_access_token(token):
-    """Hardware claims are in the access token JWT (RFC 9068), not the id_token."""
-    payload = token.split('.')[1]
-    payload += '=' * (4 - len(payload) % 4)
-    return json.loads(base64.urlsafe_b64decode(payload))
+jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
+
+
+def verify_access_token(token):
+    """Verify the access token against the issuer's published JWKS.
+
+    hardware_verified is only in the access token, not the id_token. The access token
+    is an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload --
+    an agent that acts on an unverified claim is acting on whatever it was handed.
+    """
+    if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
+        raise ValueError('not an RFC 9068 access token')
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=[signing_key.algorithm_name],
+        issuer=VOUCH_ISSUER,
+        audience=CLIENT_ID,
+    )
 
 
 def fetch_userinfo(access_token):
@@ -64,13 +80,13 @@ while True:
         print("Authenticated!")
         print(f"Access token: {tokens['access_token'][:20]}...")
 
-        # Step 4: Fetch user info and decode hardware claims from access token
+        # Step 4: Fetch user info and verify the access token's hardware claims
         userinfo = fetch_userinfo(tokens['access_token'])
-        at_claims = decode_access_token(tokens['access_token'])
+        at_claims = verify_access_token(tokens['access_token'])
         print(f"Email: {userinfo.get('email', 'N/A')}")
         print(f"Hardware verified: {at_claims.get('hardware_verified', False)}")
-        if at_claims.get('hardware_aaguid'):
-            print(f"Hardware AAGUID: {at_claims['hardware_aaguid']}")
+        print(f"acr: {at_claims.get('acr', 'N/A')}")
+        print(f"amr: {', '.join(at_claims.get('amr', [])) or 'N/A'}")
 
         # Step 5: Demonstrate post-auth API call with the access token
         print("\n--- Post-auth API call ---")

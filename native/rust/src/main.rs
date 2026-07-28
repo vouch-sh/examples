@@ -1,4 +1,4 @@
-use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
+use jsonwebtoken::{decode, decode_header, jwk::JwkSet, DecodingKey, Validation};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -28,25 +28,69 @@ struct UserInfoResponse {
     email: Option<String>,
 }
 
-/// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-fn decode_access_token(token: &str) -> Option<serde_json::Value> {
-    let payload = token.split('.').nth(1)?;
-    let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
-    serde_json::from_slice(&bytes).ok()
+/// Claims read from a verified Vouch access token.
+#[derive(Debug, Deserialize)]
+struct AccessTokenClaims {
+    #[serde(default)]
+    hardware_verified: bool,
+    #[serde(default)]
+    acr: Option<String>,
+    #[serde(default)]
+    amr: Vec<String>,
+}
+
+/// Verify a Vouch access token against the issuer's published JWKS.
+///
+/// hardware_verified is only in the access token, not the id_token. The access token is
+/// an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload -- an
+/// agent that acts on an unverified claim is acting on whatever it was handed.
+async fn verify_access_token(
+    client: &Client,
+    issuer: &str,
+    client_id: &str,
+    token: &str,
+) -> Result<AccessTokenClaims, Box<dyn std::error::Error>> {
+    let header = decode_header(token)?;
+
+    // RFC 9068 access tokens carry typ: at+jwt. Requiring it rejects id_tokens, which
+    // are not bearer credentials.
+    match header.typ.as_deref() {
+        Some(typ) if typ.eq_ignore_ascii_case("at+jwt") => {}
+        other => return Err(format!("unexpected token typ: {other:?}").into()),
+    }
+
+    let kid = header.kid.ok_or("access token has no kid")?;
+    let jwks: JwkSet = client
+        .get(format!("{issuer}/oauth/jwks"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let jwk = jwks.find(&kid).ok_or("kid not published in JWKS")?;
+
+    let mut validation = Validation::new(header.alg);
+    validation.set_audience(&[client_id]);
+    validation.set_issuer(&[issuer]);
+
+    Ok(decode::<AccessTokenClaims>(token, &DecodingKey::from_jwk(jwk)?, &validation)?.claims)
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let issuer = std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string());
-    let client_id = std::env::var("VOUCH_CLIENT_ID")
-        .expect("VOUCH_CLIENT_ID environment variable is required");
+    let issuer =
+        std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string());
+    let client_id =
+        std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID environment variable is required");
 
     let client = Client::new();
 
     // Step 1: Request device code
     let device_response: DeviceResponse = client
         .post(format!("{issuer}/oauth/device"))
-        .form(&[("client_id", &client_id), ("scope", &"openid email".to_string())])
+        .form(&[
+            ("client_id", &client_id),
+            ("scope", &"openid email".to_string()),
+        ])
         .send()
         .await?
         .json()
@@ -75,7 +119,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if response.status().is_success() {
             let tokens: TokenResponse = response.json().await?;
             println!("Authenticated!");
-            println!("Access token: {}...", &tokens.access_token[..20.min(tokens.access_token.len())]);
+            println!(
+                "Access token: {}...",
+                &tokens.access_token[..20.min(tokens.access_token.len())]
+            );
 
             // Fetch user info
             let userinfo_response = client
@@ -91,14 +138,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Email: N/A");
             }
 
-            let at_claims = decode_access_token(&tokens.access_token);
-            let hw_verified = at_claims.as_ref()
-                .and_then(|c| c["hardware_verified"].as_bool())
-                .unwrap_or(false);
-            println!("Hardware verified: {hw_verified}");
-            if let Some(aaguid) = at_claims.as_ref().and_then(|c| c["hardware_aaguid"].as_str()) {
-                println!("Hardware AAGUID: {aaguid}");
-            }
+            let at_claims =
+                verify_access_token(&client, &issuer, &client_id, &tokens.access_token).await?;
+            println!("Hardware verified: {}", at_claims.hardware_verified);
+            println!("acr: {}", at_claims.acr.as_deref().unwrap_or("N/A"));
+            println!(
+                "amr: {}",
+                if at_claims.amr.is_empty() {
+                    "N/A".to_string()
+                } else {
+                    at_claims.amr.join(", ")
+                }
+            );
             return Ok(());
         }
 

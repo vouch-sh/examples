@@ -1,4 +1,6 @@
 fastapi>=0.111
+PyJWT>=2.11
+cryptography>=46.0
 uvicorn>=0.40
 authlib>=1.6
 httpx>=0.27

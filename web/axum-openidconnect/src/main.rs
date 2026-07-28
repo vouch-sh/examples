@@ -4,14 +4,13 @@ use axum::{
     routing::get,
     Router,
 };
+use jsonwebtoken::{decode, decode_header, jwk::JwkSet, DecodingKey, Validation};
 use openidconnect::{
     core::{CoreClient, CoreProviderMetadata, CoreResponseType},
-    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    EndpointMaybeSet, EndpointNotSet, EndpointSet, IssuerUrl, Nonce,
-    OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope,
-    TokenResponse,
+    AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet,
+    EndpointNotSet, EndpointSet, IssuerUrl, Nonce, OAuth2TokenResponse, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
 };
-use base64::engine::{general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -26,10 +25,65 @@ type ConfiguredClient = CoreClient<
     EndpointMaybeSet,
 >;
 
+/// Claims read from a verified Vouch access token.
+#[derive(Debug, Deserialize)]
+struct AccessTokenClaims {
+    #[serde(default)]
+    hardware_verified: bool,
+    #[serde(default)]
+    acr: Option<String>,
+    #[serde(default)]
+    amr: Vec<String>,
+}
+
+/// Verify a Vouch access token against the issuer's published JWKS.
+///
+/// hardware_verified is only in the access token, not the id_token. The access token is
+/// an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload -- an
+/// unverified decode trusts whatever bytes you were handed.
+///
+/// The JWKS is refetched per login to keep the example short. A real service should
+/// cache it and only refetch when it encounters an unknown `kid`.
+async fn verify_access_token(
+    http_client: &reqwest::Client,
+    issuer: &str,
+    client_id: &str,
+    token: &str,
+) -> Result<AccessTokenClaims, Box<dyn std::error::Error>> {
+    let header = decode_header(token)?;
+
+    // RFC 9068 access tokens carry typ: at+jwt. Requiring it rejects id_tokens, which
+    // are not bearer credentials.
+    match header.typ.as_deref() {
+        Some(typ) if typ.eq_ignore_ascii_case("at+jwt") => {}
+        other => return Err(format!("unexpected token typ: {other:?}").into()),
+    }
+
+    let kid = header.kid.ok_or("access token has no kid")?;
+    let jwks: JwkSet = http_client
+        .get(format!("{issuer}/oauth/jwks"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let jwk = jwks.find(&kid).ok_or("kid not published in JWKS")?;
+
+    let mut validation = Validation::new(header.alg);
+    // The audience is this client's own client_id, which is what Vouch issues when the
+    // authorization request carries no RFC 8707 resource parameter.
+    validation.set_audience(&[client_id]);
+    validation.set_issuer(&[issuer]);
+
+    let data = decode::<AccessTokenClaims>(token, &DecodingKey::from_jwk(jwk)?, &validation)?;
+    Ok(data.claims)
+}
+
 #[derive(Clone)]
 struct AppState {
     oidc_client: ConfiguredClient,
     http_client: reqwest::Client,
+    issuer: String,
+    client_id: String,
     // In production, use a proper session store
     pkce_verifiers: Arc<RwLock<std::collections::HashMap<String, (PkceCodeVerifier, Nonce)>>>,
 }
@@ -40,19 +94,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
-    let issuer_url = IssuerUrl::new(
-        std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string()),
-    )?;
+    let issuer =
+        std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string());
+    let issuer_url = IssuerUrl::new(issuer.clone())?;
 
-    let provider_metadata =
-        CoreProviderMetadata::discover_async(issuer_url, &http_client).await?;
+    let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, &http_client).await?;
 
     let redirect_uri = std::env::var("VOUCH_REDIRECT_URI")
         .unwrap_or_else(|_| "http://localhost:3000/callback".to_string());
 
+    let client_id = std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID must be set");
+
     let oidc_client = CoreClient::from_provider_metadata(
         provider_metadata,
-        ClientId::new(std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID must be set")),
+        ClientId::new(client_id.clone()),
         Some(ClientSecret::new(
             std::env::var("VOUCH_CLIENT_SECRET").expect("VOUCH_CLIENT_SECRET must be set"),
         )),
@@ -62,6 +117,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         oidc_client,
         http_client,
+        issuer,
+        client_id,
         pkce_verifiers: Arc::new(RwLock::new(std::collections::HashMap::new())),
     };
 
@@ -93,8 +150,19 @@ async fn home(session: Session) -> Html<String> {
         } else {
             ""
         };
+        let acr = user["acr"].as_str().unwrap_or("N/A");
+        let amr = user["amr"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
         format!(
-            "<p>Signed in as {email}</p>{hw}<a href=\"/logout\">Sign out</a>"
+            "<p>Signed in as {email}</p>{hw}<p>acr: {acr}</p><p>amr: {amr}</p>\
+             <a href=\"/logout\">Sign out</a>"
         )
     } else {
         "<a href=\"/login\">Sign in with Vouch</a>".to_string()
@@ -120,10 +188,11 @@ async fn login(State(state): State<AppState>) -> Redirect {
         .set_pkce_challenge(pkce_challenge)
         .url();
 
-    state.pkce_verifiers.write().await.insert(
-        csrf_token.secret().clone(),
-        (pkce_verifier, nonce),
-    );
+    state
+        .pkce_verifiers
+        .write()
+        .await
+        .insert(csrf_token.secret().clone(), (pkce_verifier, nonce));
 
     Redirect::to(auth_url.as_str())
 }
@@ -176,24 +245,28 @@ async fn callback(
         .map(|e| e.as_str().to_string())
         .unwrap_or_default();
 
-    // Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-    let hardware_verified = token_response
-        .access_token()
-        .secret()
-        .split('.')
-        .nth(1)
-        .and_then(|p| {
-            URL_SAFE_NO_PAD
-                .decode(p)
-                .ok()
-                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-                .and_then(|v| v["hardware_verified"].as_bool())
-        })
-        .unwrap_or(false);
+    let at_claims = match verify_access_token(
+        &state.http_client,
+        &state.issuer,
+        &state.client_id,
+        token_response.access_token().secret(),
+    )
+    .await
+    {
+        Ok(at_claims) => at_claims,
+        Err(err) => {
+            return Html(format!(
+                "<h1>Access token verification failed</h1><p>{err}</p>"
+            ))
+            .into_response()
+        }
+    };
 
     let user = serde_json::json!({
         "email": email,
-        "hardware_verified": hardware_verified,
+        "hardware_verified": at_claims.hardware_verified,
+        "acr": at_claims.acr,
+        "amr": at_claims.amr,
     });
 
     let _ = session.insert("user", user).await;

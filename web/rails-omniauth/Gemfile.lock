@@ -297,6 +297,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  json-jwt (~> 1.17)
   omniauth-rails_csrf_protection (~> 2.0)
   omniauth_openid_connect (~> 0.8)
   puma
