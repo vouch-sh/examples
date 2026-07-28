@@ -14,6 +14,7 @@ The server exposes a `whoami` tool that returns authenticated user information.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
+| `VOUCH_AUDIENCE` | No | This server's RFC 9728 resource identifier. Published in its metadata and enforced as the token's `aud`. Defaults to `http://localhost:$PORT`; set it when the public URL differs. |
 
 ## Run
 

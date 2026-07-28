@@ -1,9 +1,9 @@
-FROM node:25-trixie-slim
+FROM node:26-trixie-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 RUN npm run build

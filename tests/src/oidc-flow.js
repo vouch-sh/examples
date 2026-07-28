@@ -167,16 +167,23 @@ async function handleDeviceFlow(page, verificationUrl, userCode, opts) {
 }
 
 /**
- * Obtain a Bearer token by performing an Authorization Code flow via Playwright.
- * Returns the ID token (JWT) since Vouch access tokens are opaque and
- * cannot be verified by resource servers using JWKS. The ID token is a
- * JWT signed by Vouch that resource servers can verify.
+ * Run an Authorization Code + PKCE flow and return the raw token endpoint response.
  *
  * @param {import("@playwright/test").BrowserContext} context
- * @param {{ clientId: string, clientSecret: string, redirectUri: string, issuer?: string }} opts
- * @returns {Promise<string>} ID token (JWT)
+ * @param {{
+ *   clientId: string,
+ *   clientSecret: string,
+ *   redirectUri: string,
+ *   issuer?: string,
+ *   resource?: string,
+ *   acrValues?: string,
+ * }} opts
+ *   `resource` sends an RFC 8707 resource indicator, which narrows the access token's
+ *   `aud` to that value. Resource servers need this to validate audience, since the
+ *   default `aud` is the calling client's own client_id.
+ * @returns {Promise<object>} the full token response (access_token, id_token, ...)
  */
-async function obtainAccessToken(context, opts) {
+async function obtainTokens(context, opts) {
   const issuer = opts.issuer || VOUCH_ISSUER_URL;
   const page = await context.newPage();
 
@@ -197,6 +204,12 @@ async function obtainAccessToken(context, opts) {
     authorizeUrl.searchParams.set("state", "test-state");
     authorizeUrl.searchParams.set("code_challenge", codeChallenge);
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    if (opts.resource) {
+      authorizeUrl.searchParams.set("resource", opts.resource);
+    }
+    if (opts.acrValues) {
+      authorizeUrl.searchParams.set("acr_values", opts.acrValues);
+    }
 
     // Navigate to authorize — with auto-consent this may redirect straight
     // through to the callback URL, so we must wait for it to settle.
@@ -238,13 +251,32 @@ async function obtainAccessToken(context, opts) {
       );
     }
 
-    const tokens = await tokenRes.json();
-    // Return the ID token (ES256 JWT) since MCP/A2A servers verify tokens
-    // via JWKS. The access token is HS256-signed and not verifiable via JWKS.
-    return tokens.id_token || tokens.access_token;
+    return await tokenRes.json();
   } finally {
     await page.close();
   }
+}
+
+/**
+ * Obtain a Bearer token for a resource server by running an Authorization Code flow.
+ *
+ * Returns the access token. Vouch access tokens are ES256-signed RFC 9068 JWTs
+ * (`typ: at+jwt`) verifiable against /oauth/jwks — see tests/tests/claims.spec.js.
+ * Pass `resource` so `aud` is narrowed to the server under test; without it the
+ * audience is the calling client's own client_id and the server has nothing to check.
+ *
+ * @param {import("@playwright/test").BrowserContext} context
+ * @param {Parameters<typeof obtainTokens>[1]} opts
+ * @returns {Promise<string>} access token (JWT)
+ */
+async function obtainAccessToken(context, opts) {
+  const tokens = await obtainTokens(context, opts);
+  if (!tokens.access_token) {
+    throw new Error(
+      `Token endpoint returned no access_token: ${JSON.stringify(Object.keys(tokens))}`,
+    );
+  }
+  return tokens.access_token;
 }
 
 module.exports = {
@@ -252,5 +284,6 @@ module.exports = {
   setupContext,
   handleAuthorize,
   handleDeviceFlow,
+  obtainTokens,
   obtainAccessToken,
 };

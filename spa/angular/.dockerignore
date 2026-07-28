@@ -1,0 +1,12 @@
+.git
+.gitignore
+.dockerignore
+README.md
+.env
+.env.local
+node_modules
+dist
+build
+.next
+.svelte-kit
+.angular

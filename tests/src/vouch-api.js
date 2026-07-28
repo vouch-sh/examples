@@ -6,15 +6,36 @@ const { execFileSync } = require("node:child_process");
 const { VOUCH_ISSUER_URL } = require("./config");
 
 /**
- * Load the __Host-vouch_session cookie from ~/.vouch/cookie.txt (Netscape cookie format).
+ * Base directory for the Vouch CLI's config, per the XDG Base Directory spec.
+ * @returns {string}
+ */
+function xdgConfigDir() {
+  return path.join(
+    process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"),
+    "vouch",
+  );
+}
+
+/**
+ * Base directory for the Vouch CLI's session state, per the XDG Base Directory spec.
+ * @returns {string}
+ */
+function xdgStateDir() {
+  return path.join(
+    process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state"),
+    "vouch",
+  );
+}
+
+/**
+ * Load the __Host-vouch_session cookie from the CLI's state dir (Netscape cookie format).
  * Used for injecting into Playwright browser contexts.
  *
- * @param {string} [cookiePath] - Path to cookie file. Defaults to ~/.vouch/cookie.txt
+ * @param {string} [cookiePath] - Path to cookie file. Defaults to $XDG_STATE_HOME/vouch/cookie.txt
  * @returns {{ domain: string, name: string, value: string, path: string, expires: number }}
  */
 function loadCookie(cookiePath) {
-  const filePath =
-    cookiePath || path.join(os.homedir(), ".vouch", "cookie.txt");
+  const filePath = cookiePath || path.join(xdgStateDir(), "cookie.txt");
 
   if (!fs.existsSync(filePath)) {
     throw new Error(
@@ -52,14 +73,13 @@ function loadCookie(cookiePath) {
 }
 
 /**
- * Load the Vouch session token from ~/.vouch/config.json.
+ * Load the Vouch session token from the CLI's config.
  *
- * @param {string} [configPath] - Path to config file.
+ * @param {string} [configPath] - Path to config file. Defaults to $XDG_CONFIG_HOME/vouch/config.json
  * @returns {string}
  */
 function loadToken(configPath) {
-  const filePath =
-    configPath || path.join(os.homedir(), ".vouch", "config.json");
+  const filePath = configPath || path.join(xdgConfigDir(), "config.json");
 
   if (!fs.existsSync(filePath)) {
     throw new Error(
@@ -187,6 +207,14 @@ async function fetchWithRetry(url, init, maxRetries = 3) {
 
 /**
  * Create a Vouch OAuth application via the REST API.
+ *
+ * KNOWN ISSUE (server side): applications created with `application_type: "spa"` or
+ * `"native"` are issued no client_secret, yet come back with
+ * `token_endpoint_auth_method: "client_secret_basic"`. The token endpoint then answers
+ * `401 invalid_client: client authentication required`, so no public-client
+ * authorization-code flow can complete and all five spa.spec.js login tests fail.
+ * Passing `token_endpoint_auth_method: "none"` in this request is silently ignored.
+ * Public app types need to default to `none` in Vouch before spa.spec.js can pass.
  *
  * @param {{ token: string, dpopKey: crypto.KeyObject }} creds
  * @param {{ name: string, applicationType: string, redirectUris: string[], accessScope?: string }} opts

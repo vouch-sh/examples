@@ -1,10 +1,48 @@
-// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-function decodeAccessToken(token) {
-  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
-}
+import { createPublicKey, verify as verifySignature } from 'node:crypto';
 
 const VOUCH_ISSUER = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const CLIENT_ID = process.env.VOUCH_CLIENT_ID;
+
+/**
+ * Verify a Vouch access token against the issuer's published JWKS.
+ *
+ * hardware_verified is only in the access token, not the id_token. The access token is
+ * an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload -- an
+ * agent that acts on an unverified claim is acting on whatever it was handed.
+ *
+ * Uses only node:crypto so this example keeps its zero-dependency footprint; a real
+ * agent would reach for a JOSE library and cache the JWKS.
+ */
+async function verifyAccessToken(token) {
+  const [rawHeader, rawPayload, rawSignature] = token.split('.');
+  if (!rawSignature) throw new Error('access token is not a JWS');
+
+  const header = JSON.parse(Buffer.from(rawHeader, 'base64url').toString());
+  // RFC 9068 access tokens carry typ: at+jwt. Requiring it rejects id_tokens, which
+  // are not bearer credentials.
+  if (header.typ?.toLowerCase() !== 'at+jwt') {
+    throw new Error(`unexpected token typ: ${header.typ}`);
+  }
+
+  const jwks = await (await fetch(`${VOUCH_ISSUER}/oauth/jwks`)).json();
+  const jwk = jwks.keys.find((k) => k.kid === header.kid);
+  if (!jwk) throw new Error(`kid ${header.kid} not published in JWKS`);
+
+  const key = createPublicKey({ key: jwk, format: 'jwk' });
+  const data = Buffer.from(`${rawHeader}.${rawPayload}`);
+  const signature = Buffer.from(rawSignature, 'base64url');
+  // JOSE encodes ECDSA signatures as raw r||s rather than DER.
+  const ok = jwk.kty === 'EC'
+    ? verifySignature('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature)
+    : verifySignature('sha256', data, key, signature);
+  if (!ok) throw new Error('access token signature did not verify');
+
+  const claims = JSON.parse(Buffer.from(rawPayload, 'base64url').toString());
+  if (claims.iss !== VOUCH_ISSUER) throw new Error('issuer mismatch');
+  if (![claims.aud].flat().includes(CLIENT_ID)) throw new Error('audience mismatch');
+  if (claims.exp * 1000 < Date.now()) throw new Error('access token expired');
+  return claims;
+}
 
 if (!CLIENT_ID) {
   console.error('Error: VOUCH_CLIENT_ID environment variable is required');
@@ -63,14 +101,13 @@ async function deviceFlow() {
       console.log('Authenticated!');
       console.log(`Access token: ${tokens.access_token.slice(0, 20)}...`);
 
-      // Step 4: Fetch user info and decode hardware claims from access token
+      // Step 4: Fetch user info and verify the access token's hardware claims
       const userInfo = await fetchUserInfo(tokens.access_token);
-      const atClaims = decodeAccessToken(tokens.access_token);
+      const atClaims = await verifyAccessToken(tokens.access_token);
       console.log(`Email: ${userInfo.email || 'N/A'}`);
       console.log(`Hardware verified: ${atClaims.hardware_verified || false}`);
-      if (atClaims.hardware_aaguid) {
-        console.log(`Hardware AAGUID: ${atClaims.hardware_aaguid}`);
-      }
+      console.log(`acr: ${atClaims.acr || 'N/A'}`);
+      console.log(`amr: ${(atClaims.amr || []).join(', ') || 'N/A'}`);
 
       // Step 5: Demonstrate post-auth API call with the access token
       console.log('\n--- Post-auth API call ---');

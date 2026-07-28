@@ -9,6 +9,7 @@
     "test:native": "playwright test tests/native.spec.js",
     "test:mcp": "playwright test tests/mcp.spec.js",
     "test:a2a": "playwright test tests/a2a.spec.js",
+    "test:claims": "playwright test tests/claims.spec.js",
     "report": "playwright show-report"
   },
   "devDependencies": {

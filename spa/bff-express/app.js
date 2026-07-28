@@ -1,15 +1,11 @@
 import express from 'express';
 import session from 'express-session';
 import * as client from 'openid-client';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-function decodeAccessToken(token) {
-  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
-}
 
 const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const clientId = process.env.VOUCH_CLIENT_ID;
@@ -17,6 +13,21 @@ const clientSecret = process.env.VOUCH_CLIENT_SECRET;
 const callbackUrl =
   process.env.VOUCH_REDIRECT_URI ||
   'http://localhost:3000/auth/callback';
+
+const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
+
+// hardware_verified is only in the access token, not the id_token. The access token is
+// an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload. This is
+// the whole point of a BFF: the token never reaches the browser and the decision about
+// it is made here, on the server, against the published JWKS.
+async function verifyAccessToken(token) {
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer,
+    audience: clientId,
+    typ: 'at+jwt',
+  });
+  return payload;
+}
 
 const config = await client.discovery(
   new URL(issuer),
@@ -80,12 +91,13 @@ app.get('/auth/callback', async (req, res) => {
     );
 
     const claims = tokens.claims();
-    const atClaims = decodeAccessToken(tokens.access_token);
+    const atClaims = await verifyAccessToken(tokens.access_token);
     req.session.user = {
       id: claims.sub,
       email: claims.email,
       hardwareVerified: atClaims.hardware_verified || false,
-      hardwareAaguid: atClaims.hardware_aaguid || null,
+      acr: atClaims.acr || null,
+      amr: atClaims.amr || [],
     };
 
     req.session.tokens = {

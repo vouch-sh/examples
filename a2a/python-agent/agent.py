@@ -19,6 +19,11 @@ from starlette.responses import JSONResponse
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 PORT = int(os.environ.get('PORT', '3000'))
 
+# This agent's resource identifier. Callers pass it as the RFC 8707 `resource`
+# parameter when they authorize, so Vouch narrows the access token's `aud` to it
+# and we can prove the token was minted for us specifically.
+RESOURCE = os.environ.get('VOUCH_AUDIENCE', f'http://localhost:{PORT}')
+
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
 
@@ -29,15 +34,20 @@ def verify_bearer_token(request: Request) -> dict | None:
         return None
     token = auth[7:]
     try:
+        # RFC 9068 access tokens carry `typ: at+jwt`. Requiring it rejects ID tokens,
+        # which are not bearer credentials no matter whose they are.
+        if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
+            return None
         signing_key = jwks_client.get_signing_key_from_jwt(token)
-        payload = jwt.decode(
+        return jwt.decode(
             token,
             signing_key.key,
             algorithms=[signing_key.algorithm_name],
             issuer=VOUCH_ISSUER,
-            options={'verify_aud': False},
+            # Without an audience check, any Vouch-issued token reaches this agent,
+            # including one minted for an unrelated client.
+            audience=RESOURCE,
         )
-        return payload
     except Exception:
         return None
 
@@ -98,10 +108,7 @@ a2a_app = A2AStarletteApplication(
 )
 
 # Wrap with auth middleware
-from starlette.applications import Starlette
-from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.routing import Route
 
 
 async def auth_middleware(request: Request, call_next):

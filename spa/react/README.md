@@ -20,5 +20,5 @@ Register `http://localhost:3000/callback` as the redirect URI in your OIDC provi
 
 ## Advanced Features
 
-- **Profile claims** — Displays `sub`, `email`, `email_verified` from the ID token and `hardware_verified`, `hardware_aaguid` from the access token JWT
+- **Profile claims** — Displays `sub`, `email`, `email_verified` from the ID token and `hardware_verified`, `acr`, `amr` from the access token payload (decoded for display only, not verified — see the comment in `src/App.jsx`)
 - **Token expiry countdown** — Shows a live countdown of seconds until the access token expires

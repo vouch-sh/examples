@@ -1,8 +1,15 @@
 import { useAuth } from 'react-oidc-context';
 import { useState, useEffect, useMemo } from 'react';
 
-// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-function decodeAccessToken(token) {
+// Display only -- never an authorization decision.
+//
+// This decodes the access token payload WITHOUT verifying its signature. A public
+// client gains nothing by verifying a token it just received over TLS from the token
+// endpoint, and shipping a JOSE library to the browser to do it would teach the wrong
+// lesson. The security decision belongs to the resource server, which must verify the
+// signature and the audience -- see mcp/remote-server-ts, or spa/bff-express for a
+// backend that holds the tokens instead.
+function decodeUnverifiedForDisplay(token) {
   return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
 }
 
@@ -35,7 +42,7 @@ function TokenInfo({ auth }) {
 function UserProfile({ auth }) {
   const profile = auth.user?.profile;
   const atClaims = useMemo(
-    () => auth.user?.access_token ? decodeAccessToken(auth.user.access_token) : {},
+    () => auth.user?.access_token ? decodeUnverifiedForDisplay(auth.user.access_token) : {},
     [auth.user?.access_token],
   );
   if (!profile) return null;
@@ -50,9 +57,8 @@ function UserProfile({ auth }) {
           <li><strong>email_verified:</strong> {String(profile.email_verified)}</li>
         )}
         <li><strong>hardware_verified:</strong> {String(atClaims.hardware_verified || false)}</li>
-        {atClaims.hardware_aaguid && (
-          <li><strong>hardware_aaguid:</strong> {atClaims.hardware_aaguid}</li>
-        )}
+        {atClaims.acr && <li><strong>acr:</strong> {atClaims.acr}</li>}
+        {atClaims.amr && <li><strong>amr:</strong> {atClaims.amr.join(', ')}</li>}
       </ul>
     </div>
   );
@@ -85,7 +91,7 @@ export default function App() {
       {auth.isAuthenticated ? (
         <div>
           <p>Signed in as {auth.user?.profile.email}</p>
-          {auth.user?.access_token && decodeAccessToken(auth.user.access_token).hardware_verified && (
+          {auth.user?.access_token && decodeUnverifiedForDisplay(auth.user.access_token).hardware_verified && (
             <p><strong>Hardware Verified</strong></p>
           )}
           <UserProfile auth={auth} />

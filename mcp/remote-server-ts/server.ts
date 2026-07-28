@@ -9,6 +9,12 @@ const PORT = parseInt(process.env.PORT || '3000');
 
 const JWKS = createRemoteJWKSet(new URL(`${VOUCH_ISSUER}/oauth/jwks`));
 
+// Our RFC 9728 resource identifier. Clients pass this as the RFC 8707 `resource`
+// parameter when they authorize, which makes Vouch narrow the access token's `aud`
+// to this value. Both the metadata document and token verification use this one
+// constant so they cannot drift apart.
+const RESOURCE = process.env.VOUCH_AUDIENCE || `http://localhost:${PORT}`;
+
 const app = express();
 
 // Parse JSON request bodies (required before route handlers)
@@ -17,7 +23,7 @@ app.use(express.json());
 // RFC 9728: Protected Resource Metadata
 app.get('/.well-known/oauth-protected-resource', (_req, res) => {
   res.json({
-    resource: process.env.VOUCH_AUDIENCE || `http://localhost:${PORT}`,
+    resource: RESOURCE,
     authorization_servers: [VOUCH_ISSUER],
     bearer_methods_supported: ['header'],
     scopes_supported: ['openid', 'email'],
@@ -28,7 +34,8 @@ interface AuthInfo {
   email: string;
   sub: string;
   hardwareVerified: boolean;
-  hardwareAaguid: string | null;
+  acr: string;
+  amr: string[];
   rawToken: string;
 }
 
@@ -52,12 +59,20 @@ async function verifyToken(
   try {
     const { payload } = await jwtVerify(token, JWKS, {
       issuer: VOUCH_ISSUER,
+      // Without an audience check any Vouch-issued token works here, including one
+      // minted for a completely different client. The client must request this
+      // resource (RFC 8707) so that `aud` is narrowed to us.
+      audience: RESOURCE,
+      // RFC 9068 access tokens carry `typ: at+jwt`. Requiring it rejects ID tokens
+      // outright, which are not bearer credentials no matter whose they are.
+      typ: 'at+jwt',
     });
     (req as any).auth = {
       email: payload.email as string,
       sub: payload.sub as string,
       hardwareVerified: payload.hardware_verified as boolean,
-      hardwareAaguid: (payload.hardware_aaguid as string) || null,
+      acr: payload.acr as string,
+      amr: (payload.amr as string[]) ?? [],
       rawToken: token,
     };
     next();
@@ -93,7 +108,8 @@ function createMcpServer(auth: AuthInfo) {
                 email: auth.email,
                 sub: auth.sub,
                 hardware_verified: auth.hardwareVerified,
-                hardware_aaguid: auth.hardwareAaguid,
+                acr: auth.acr,
+                amr: auth.amr,
               },
               null,
               2,
@@ -135,7 +151,7 @@ function createMcpServer(auth: AuthInfo) {
                 status: 'success',
                 message: 'Sensitive action completed',
                 hardware_verified: true,
-                hardware_aaguid: auth.hardwareAaguid,
+                amr: auth.amr,
               },
               null,
               2,
@@ -200,9 +216,10 @@ function createMcpServer(auth: AuthInfo) {
                 active: result.active,
                 ...result,
                 note:
-                  'Token introspection is the correct pattern for validating ' +
-                  'opaque access tokens. For JWTs (like Vouch ID tokens), ' +
-                  'use local JWKS verification instead.',
+                  'Vouch access tokens are ES256-signed RFC 9068 JWTs, so this ' +
+                  'server verifies them locally against JWKS. Introspection is ' +
+                  'shown here because it also reports server-side revocation, ' +
+                  'which local verification cannot see.',
               },
               null,
               2,

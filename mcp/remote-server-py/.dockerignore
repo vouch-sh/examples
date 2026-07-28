@@ -1,0 +1,12 @@
+.git
+.gitignore
+.dockerignore
+README.md
+.env
+.env.local
+__pycache__
+*.py[cod]
+.venv
+venv
+*.egg-info
+db.sqlite3

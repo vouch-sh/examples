@@ -3,8 +3,15 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 
-// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-function decodeAccessToken(token: string): Record<string, unknown> {
+// Display only -- never an authorization decision.
+//
+// This decodes the access token payload WITHOUT verifying its signature. A public
+// client gains nothing by verifying a token it just received over TLS from the token
+// endpoint, and shipping a JOSE library to the browser to do it would teach the wrong
+// lesson. The security decision belongs to the resource server, which must verify the
+// signature and the audience -- see mcp/remote-server-ts, or spa/bff-express for a
+// backend that holds the tokens instead.
+function decodeUnverifiedForDisplay(token: string): Record<string, unknown> {
   return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
 }
 
@@ -44,7 +51,7 @@ export class AppComponent implements OnInit {
         this.email = userData.email || '';
       }
       if (accessToken) {
-        const atClaims = decodeAccessToken(accessToken);
+        const atClaims = decodeUnverifiedForDisplay(accessToken);
         this.hardwareVerified = (atClaims['hardware_verified'] as boolean) || false;
       }
       // After processing the callback, redirect to home with a full page load

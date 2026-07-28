@@ -5,9 +5,13 @@ edition = "2021"
 
 [dependencies]
 axum = "0.8"
-base64 = "0.22"
+# jsonwebtoken 11 panics at first use unless exactly one crypto provider feature is
+# enabled. rust_crypto is the pure-Rust one, matching the rustls-only reqwest below.
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 openidconnect = "4"
-reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+# Pinned to 0.12 by openidconnect 4 -> oauth2 5, which re-exports these types.
+# Using a different reqwest here would not typecheck against request_async.
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

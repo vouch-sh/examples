@@ -5,7 +5,7 @@ RUN apt-get update -qq && apt-get install -y build-essential libpq-dev libyaml-d
 WORKDIR /app
 
 COPY Gemfile Gemfile.lock ./
-RUN bundle install
+RUN bundle config set --local frozen true && bundle install
 
 COPY . .
 

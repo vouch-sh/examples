@@ -4,12 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -19,6 +17,7 @@ var (
 	oauth2Config *oauth2.Config
 	oidcProvider *oidc.Provider
 	verifier     *oidc.IDTokenVerifier
+	atVerifier   *oidc.IDTokenVerifier
 )
 
 type sessionData struct {
@@ -55,6 +54,12 @@ func main() {
 	}
 
 	verifier = oidcProvider.Verifier(&oidc.Config{ClientID: clientID})
+
+	// Verifier for the access token. Vouch access tokens are ES256-signed RFC 9068
+	// JWTs whose `aud` is this client's own client_id, so the same JWKS-backed
+	// verifier works -- but SkipClientIDCheck stays off precisely because the
+	// audience is what proves the token was minted for us.
+	atVerifier = oidcProvider.Verifier(&oidc.Config{ClientID: clientID})
 
 	oauth2Config = &oauth2.Config{
 		ClientID:     clientID,
@@ -147,9 +152,9 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	atClaims, err := decodeAccessToken(token.AccessToken)
+	atClaims, err := verifyAccessToken(r.Context(), token.AccessToken)
 	if err != nil {
-		http.Error(w, "Failed to decode access token", http.StatusInternalServerError)
+		http.Error(w, "Failed to verify access token", http.StatusInternalServerError)
 		return
 	}
 	hwVerified, _ := atClaims["hardware_verified"].(bool)
@@ -183,20 +188,20 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// Hardware claims (hardware_verified, hardware_aaguid) are in the
-// access token JWT (RFC 9068), not the OIDC id_token.
-func decodeAccessToken(token string) (map[string]interface{}, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid JWT format")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+// hardware_verified is only in the access token, not the OIDC id_token. The access
+// token is an ES256-signed RFC 9068 JWT, so verify it against the provider's JWKS
+// rather than decoding the payload -- an unverified decode trusts whatever bytes you
+// were handed.
+func verifyAccessToken(ctx context.Context, token string) (map[string]interface{}, error) {
+	verified, err := atVerifier.Verify(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 	var claims map[string]interface{}
-	err = json.Unmarshal(payload, &claims)
-	return claims, err
+	if err := verified.Claims(&claims); err != nil {
+		return nil, err
+	}
+	return claims, nil
 }
 
 func generateState() string {

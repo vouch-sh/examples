@@ -110,3 +110,12 @@ updates:
       - "/web/aspnet-core"
     patterns: ["*"]
     multi-ecosystem-group: "all"
+
+  # Workflow actions are SHA-pinned and enforced by secure_workflows.yml, so without
+  # this they never move. Dependabot preserves the `owner/repo@<sha> # vX.Y.Z` form
+  # and updates both halves together.
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+    patterns: ["*"]
+    multi-ecosystem-group: "all"

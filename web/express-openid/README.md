@@ -45,5 +45,5 @@ Register this URL as the allowed callback in your OIDC provider configuration.
 This example demonstrates several post-login patterns:
 
 - **`/userinfo`** — Calls the Vouch UserInfo endpoint with the stored access token and displays the full response
-- **`/protected`** — Hardware key enforcement: returns 403 if `hardware_verified` is false, shows `hardware_aaguid` when present
+- **`/protected`** — Hardware key enforcement: returns 403 if `hardware_verified` is false, and shows the verified `acr` and `amr` claims
 - **`/introspect`** — Calls the Vouch token introspection endpoint (`/oauth/introspect`) to check whether the access token is active
