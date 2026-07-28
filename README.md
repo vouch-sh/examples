@@ -33,7 +33,7 @@ Server-side applications that securely store a client secret. Uses the Authoriza
 
 ### Single Page Applications (Public Clients)
 
-Browser-only applications using PKCE (no client secret required).
+Browser-based applications. The first five are public clients using PKCE with no client secret.
 
 | Framework | Directory | Language |
 |-----------|-----------|----------|
@@ -43,6 +43,11 @@ Browser-only applications using PKCE (no client secret required).
 | SvelteKit + oidc-client-ts | [`spa/sveltekit`](spa/sveltekit) | JavaScript |
 | Angular + angular-auth-oidc-client | [`spa/angular`](spa/angular) | TypeScript |
 | BFF + Express (recommended) | [`spa/bff-express`](spa/bff-express) | Node.js |
+
+> [!IMPORTANT]
+> [`spa/bff-express`](spa/bff-express) is the exception: it is a **confidential** client and
+> requires `VOUCH_CLIENT_SECRET`. Tokens stay on the server and the browser only ever receives an
+> HttpOnly session cookie.
 
 ### Native & CLI Applications (Public Clients)
 
@@ -88,7 +93,9 @@ docker run -p 3000:3000 \
 ```
 
 > [!NOTE]
-> SPA examples do not require `VOUCH_CLIENT_SECRET`. Native/CLI examples do not require `VOUCH_REDIRECT_URI` or `VOUCH_CLIENT_SECRET`.
+> SPA examples do not require `VOUCH_CLIENT_SECRET`, except [`spa/bff-express`](spa/bff-express),
+> which is a confidential client. Native/CLI examples do not require `VOUCH_REDIRECT_URI` or
+> `VOUCH_CLIENT_SECRET`.
 
 ## Environment Variables
 

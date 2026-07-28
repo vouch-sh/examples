@@ -1,0 +1,11 @@
+.git
+.gitignore
+.dockerignore
+README.md
+.env
+.env.local
+tmp
+log
+vendor/bundle
+storage
+*.sqlite3

@@ -1,4 +1,4 @@
-.PHONY: test test-web test-spa test-native test-mcp test-a2a install report
+.PHONY: test test-web test-spa test-native test-mcp test-a2a test-claims install report
 
 test:
 	cd tests && npm test
@@ -17,6 +17,9 @@ test-mcp:
 
 test-a2a:
 	cd tests && npm run test:a2a
+
+test-claims:
+	cd tests && npm run test:claims
 
 install:
 	cd tests && npm install

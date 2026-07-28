@@ -1,0 +1,13 @@
+.git
+.gitignore
+.dockerignore
+README.md
+.env
+.env.local
+vendor
+
+# Note: storage/ and bootstrap/cache must be COPY'd. They are tracked via .gitkeep
+# files and Laravel fails at `artisan` time if the directories are absent.
+storage/framework/cache/*.php
+storage/logs/*.log
+bootstrap/cache/*.php

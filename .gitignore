@@ -4,6 +4,8 @@ vendor/
 target/
 .gradle/
 build/
+__pycache__/
+.venv/
 
 # Environment
 .env
@@ -22,5 +24,9 @@ Thumbs.db
 # Build artifacts
 dist/
 .next/
+.svelte-kit/
+.angular/
+obj/
+bin/
 tests/playwright-report/
 tests/test-results/

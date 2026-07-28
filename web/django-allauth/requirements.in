@@ -1,0 +1,2 @@
+django>=5.0,<7
+django-allauth[socialaccount]>=65.0
