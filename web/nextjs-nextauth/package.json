@@ -8,6 +8,7 @@
     "start": "next start -p 3000"
   },
   "dependencies": {
+    "jose": "^6.2.4",
     "next": "^16.0.0",
     "next-auth": "^4.24.0",
     "react": "^19.0.0",

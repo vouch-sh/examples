@@ -108,10 +108,7 @@ a2a_app = A2AStarletteApplication(
 )
 
 # Wrap with auth middleware
-from starlette.applications import Starlette
-from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.routing import Route
 
 
 async def auth_middleware(request: Request, call_next):

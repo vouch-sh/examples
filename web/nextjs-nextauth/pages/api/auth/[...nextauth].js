@@ -1,8 +1,19 @@
 import NextAuth from 'next-auth';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-// Hardware claims are in the access token JWT (RFC 9068), not the id_token.
-function decodeAccessToken(token) {
-  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
+const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
+
+// hardware_verified is only in the access token, not the id_token. The access token is
+// an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload -- an
+// unverified decode trusts whatever bytes you were handed.
+async function verifyAccessToken(token) {
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer,
+    audience: process.env.VOUCH_CLIENT_ID,
+    typ: 'at+jwt',
+  });
+  return payload;
 }
 
 export default NextAuth({
@@ -10,7 +21,7 @@ export default NextAuth({
     id: 'vouch',
     name: 'Vouch',
     type: 'oauth',
-    wellKnown: `${process.env.VOUCH_ISSUER || 'https://us.vouch.sh'}/.well-known/openid-configuration`,
+    wellKnown: `${issuer}/.well-known/openid-configuration`,
     clientId: process.env.VOUCH_CLIENT_ID,
     clientSecret: process.env.VOUCH_CLIENT_SECRET,
     authorization: { params: { scope: 'openid email' } },
@@ -26,15 +37,17 @@ export default NextAuth({
   callbacks: {
     async jwt({ token, account }) {
       if (account?.access_token) {
-        const atClaims = decodeAccessToken(account.access_token);
+        const atClaims = await verifyAccessToken(account.access_token);
         token.hardwareVerified = atClaims.hardware_verified || false;
-        token.hardwareAaguid = atClaims.hardware_aaguid || null;
+        token.acr = atClaims.acr || null;
+        token.amr = atClaims.amr || [];
       }
       return token;
     },
     async session({ session, token }) {
       session.user.hardwareVerified = token.hardwareVerified;
-      session.user.hardwareAaguid = token.hardwareAaguid;
+      session.user.acr = token.acr;
+      session.user.amr = token.amr;
       return session;
     },
   },

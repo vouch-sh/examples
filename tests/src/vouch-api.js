@@ -208,6 +208,14 @@ async function fetchWithRetry(url, init, maxRetries = 3) {
 /**
  * Create a Vouch OAuth application via the REST API.
  *
+ * KNOWN ISSUE (server side): applications created with `application_type: "spa"` or
+ * `"native"` are issued no client_secret, yet come back with
+ * `token_endpoint_auth_method: "client_secret_basic"`. The token endpoint then answers
+ * `401 invalid_client: client authentication required`, so no public-client
+ * authorization-code flow can complete and all five spa.spec.js login tests fail.
+ * Passing `token_endpoint_auth_method: "none"` in this request is silently ignored.
+ * Public app types need to default to `none` in Vouch before spa.spec.js can pass.
+ *
  * @param {{ token: string, dpopKey: crypto.KeyObject }} creds
  * @param {{ name: string, applicationType: string, redirectUris: string[], accessScope?: string }} opts
  * @returns {Promise<{ id: string, client_id: string, client_secret: string|null, name: string, application_type: string, access_scope: string }>}

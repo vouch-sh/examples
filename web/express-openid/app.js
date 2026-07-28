@@ -1,6 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import * as client from 'openid-client';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const clientId = process.env.VOUCH_CLIENT_ID;
@@ -17,10 +18,22 @@ app.use(session({
   saveUninitialized: false,
 }));
 
-// Hardware claims (hardware_verified, hardware_aaguid) are in the
-// access token JWT (RFC 9068), not the OIDC id_token.
-function decodeAccessToken(token) {
-  return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
+
+// hardware_verified is only in the access token, not the id_token. The access token
+// is an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload --
+// an unverified decode trusts whatever bytes you were handed.
+//
+// `aud` is this client's own client_id, which is what Vouch issues by default when
+// the authorization request carries no RFC 8707 `resource` parameter. `typ: at+jwt`
+// rejects id_tokens, which are not bearer credentials.
+async function verifyAccessToken(token) {
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer,
+    audience: clientId,
+    typ: 'at+jwt',
+  });
+  return payload;
 }
 
 function requireAuth(req, res, next) {
@@ -34,7 +47,8 @@ app.get('/', (req, res) => {
   if (req.session.user) {
     const hw = req.session.user.hardwareVerified
       ? `<p><strong>Hardware Verified</strong></p>
-         <p>AAGUID: ${req.session.user.hardwareAaguid || 'N/A'}</p>`
+         <p>acr: ${req.session.user.acr || 'N/A'}</p>
+         <p>amr: ${req.session.user.amr.join(', ') || 'N/A'}</p>`
       : '';
     res.send(`
       <!DOCTYPE html>
@@ -100,12 +114,13 @@ app.get('/auth/vouch/callback', async (req, res) => {
     });
 
     const claims = tokens.claims();
-    const atClaims = decodeAccessToken(tokens.access_token);
+    const atClaims = await verifyAccessToken(tokens.access_token);
     req.session.user = {
       id: claims.sub,
       email: claims.email,
       hardwareVerified: atClaims.hardware_verified || false,
-      hardwareAaguid: atClaims.hardware_aaguid || null,
+      acr: atClaims.acr || null,
+      amr: atClaims.amr || [],
     };
 
     req.session.tokens = {
@@ -123,7 +138,7 @@ app.get('/auth/vouch/callback', async (req, res) => {
 });
 
 app.get('/protected', requireAuth, (req, res) => {
-  const { hardwareVerified, hardwareAaguid, email } = req.session.user;
+  const { hardwareVerified, acr, amr, email } = req.session.user;
   if (!hardwareVerified) {
     res.status(403).send(`
       <!DOCTYPE html>
@@ -147,7 +162,8 @@ app.get('/protected', requireAuth, (req, res) => {
       <h1>Protected Route</h1>
       <p>Signed in as ${email}</p>
       <p><strong>Hardware Verified</strong></p>
-      <p>AAGUID: ${hardwareAaguid || 'N/A'}</p>
+      <p>acr: ${acr || 'N/A'}</p>
+      <p>amr: ${amr.join(', ') || 'N/A'}</p>
       <a href="/">Back</a>
     </body>
     </html>

@@ -1,7 +1,8 @@
-import base64
 import json
 import os
+import jwt
 import requests as http_requests
+from jwt import PyJWKClient
 from flask import Flask, redirect, url_for, session, render_template_string
 from authlib.integrations.flask_client import OAuth
 
@@ -9,11 +10,14 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
+VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
+
+jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
 oauth = OAuth(app)
 oauth.register(
     name='vouch',
-    client_id=os.environ.get('VOUCH_CLIENT_ID'),
+    client_id=VOUCH_CLIENT_ID,
     client_secret=os.environ.get('VOUCH_CLIENT_SECRET'),
     server_metadata_url=f"{VOUCH_ISSUER}/.well-known/openid-configuration",
     client_kwargs={'scope': 'openid email'},
@@ -51,7 +55,8 @@ PROTECTED_TEMPLATE = """
   <h1>Protected Route</h1>
   <p>Signed in as {{ email }}</p>
   <p><strong>Hardware Verified</strong></p>
-  <p>AAGUID: {{ aaguid }}</p>
+  <p>acr: {{ acr }}</p>
+  <p>amr: {{ amr }}</p>
   <a href="/">Back</a>
 </body>
 </html>
@@ -70,11 +75,26 @@ PROTECTED_DENIED_TEMPLATE = """
 </html>
 """
 
-def decode_access_token(token):
-    """Hardware claims are in the access token JWT (RFC 9068), not the id_token."""
-    payload = token.split('.')[1]
-    payload += '=' * (4 - len(payload) % 4)
-    return json.loads(base64.urlsafe_b64decode(payload))
+def verify_access_token(token):
+    """Verify the access token and return its claims.
+
+    hardware_verified is only in the access token, not the id_token. The access token
+    is an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload --
+    an unverified decode trusts whatever bytes you were handed.
+
+    The audience is this client's own client_id, which is what Vouch issues when the
+    authorization request carries no RFC 8707 `resource` parameter.
+    """
+    if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
+        raise ValueError('not an RFC 9068 access token')
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=[signing_key.algorithm_name],
+        issuer=VOUCH_ISSUER,
+        audience=VOUCH_CLIENT_ID,
+    )
 
 
 USERINFO_TEMPLATE = """
@@ -104,11 +124,12 @@ def login():
 def callback():
     token = oauth.vouch.authorize_access_token()
     userinfo = token.get('userinfo')
-    at_claims = decode_access_token(token['access_token'])
+    at_claims = verify_access_token(token['access_token'])
     session['user'] = {
         'email': userinfo.get('email'),
         'hardware_verified': at_claims.get('hardware_verified', False),
-        'hardware_aaguid': at_claims.get('hardware_aaguid'),
+        'acr': at_claims.get('acr'),
+        'amr': at_claims.get('amr', []),
     }
     session['tokens'] = {
         'access_token': token.get('access_token'),
@@ -126,7 +147,8 @@ def protected():
     return render_template_string(
         PROTECTED_TEMPLATE,
         email=user['email'],
-        aaguid=user.get('hardware_aaguid') or 'N/A',
+        acr=user.get('acr') or 'N/A',
+        amr=', '.join(user.get('amr') or []) or 'N/A',
     )
 
 @app.route('/userinfo')
