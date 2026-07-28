@@ -49,7 +49,11 @@ scripts/smoke.sh web/express-openid my-example
 
 It uses throwaway credentials and needs no Vouch account. Probes are chosen per category: web apps must render `/`; static SPAs must render `/` **and** have their `__VOUCH_*` placeholders substituted into the built bundle (`entrypoint.sh` exits 0 even when its `sed` glob matches nothing, so this is the only thing catching a bundler output-layout change); MCP and A2A servers must serve their well-known metadata and reject unauthenticated calls with 401; native CLIs must get past module loading.
 
-A Playwright end-to-end suite lives in `tests/` (specs for web, spa, native, mcp, a2a) and is driven by the root `Makefile` (`make test`, `make test-mcp`, …). It is **not** wired into CI: it shells out to the macOS Keychain for a DPoP signing key, needs a live hardware-key-backed Vouch session (`~/.vouch/cookie.txt`), and creates/destroys real OAuth applications. Run it locally before merging anything non-trivial.
+A Playwright end-to-end suite lives in `tests/` (specs for web, spa, native, mcp, a2a, claims) and is driven by the root `Makefile` (`make test`, `make test-mcp`, …). It is **not** wired into CI: it shells out to the macOS Keychain for a DPoP signing key, needs a live hardware-key-backed Vouch session, and creates/destroys real OAuth applications. Run it locally before merging anything non-trivial.
+
+Credentials come from the Vouch CLI's XDG locations — `$XDG_CONFIG_HOME/vouch/config.json` and `$XDG_STATE_HOME/vouch/cookie.txt`, defaulting to `~/.config` and `~/.local/state`. Run `vouch login` first.
+
+`make test-claims` is a regression guard on the shape of a Vouch access token (ES256, `typ: at+jwt`, JWKS-verifiable, `aud` = the requesting client unless narrowed by an RFC 8707 `resource` parameter). Every example's token verification depends on those facts, so if Vouch ever changes them this fails first.
 
 ## Adding a New Example
 

@@ -112,19 +112,8 @@ mcp/*)
 
 a2a/*)
   start
-  # Path moved to agent-card.json in a2a-sdk 0.3.0; accept either until we migrate.
   wait_http "/.well-known/agent-card.json" >/dev/null
-  port="$(port_of)"
-  card_ok=0
-  for p in /.well-known/agent-card.json /.well-known/agent.json; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:${port}${p}" 2>/dev/null || true)
-    if [ "$code" = "200" ]; then
-      echo "  GET $p -> 200"
-      card_ok=1
-      break
-    fi
-  done
-  [ "$card_ok" = "1" ] || fail "agent card not served at either well-known path"
+  expect_status "/.well-known/agent-card.json" '^200$'
   expect_post_status "/" '^401$'
   ;;
 

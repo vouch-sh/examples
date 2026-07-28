@@ -74,7 +74,7 @@ for (const example of A2A_EXAMPLES) {
 
     test("agent card has OIDC security scheme", async () => {
       const res = await fetch(
-        `${baseUrl}/.well-known/agent.json`,
+        `${baseUrl}/.well-known/agent-card.json`,
       );
       expect(res.status).toBe(200);
 
@@ -142,12 +142,15 @@ for (const example of A2A_EXAMPLES) {
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: 1,
-          method: "tasks/send",
+          // `message/send` is the v0.3 method name, served here because the agent
+          // enables v0_3 compat. The native 1.0 name is `SendMessage`.
+          method: "message/send",
           params: {
-            id: "test-task-1",
             message: {
               role: "user",
-              parts: [{ type: "text", text: "Who am I?" }],
+              parts: [{ kind: "text", text: "Who am I?" }],
+              messageId: "test-message-1",
+              kind: "message",
             },
           },
         }),
@@ -156,6 +159,11 @@ for (const example of A2A_EXAMPLES) {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toHaveProperty("jsonrpc", "2.0");
+
+      // A JSON-RPC error is also 200 with jsonrpc:"2.0", so assert the executor
+      // actually ran and produced its identity message.
+      expect(body.error, `JSON-RPC error: ${JSON.stringify(body.error)}`).toBeUndefined();
+      expect(JSON.stringify(body.result)).toContain("Identity verified via Vouch OIDC");
     });
   });
 }
