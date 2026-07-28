@@ -28,12 +28,27 @@ class VouchTokenVerifier(TokenVerifier):
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
+            # RFC 9068 access tokens carry `typ: at+jwt`; ID tokens do not and are
+            # not bearer credentials.
+            if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
+                return None
             signing_key = jwks_client.get_signing_key_from_jwt(token)
             payload = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=[signing_key.algorithm_name],
                 issuer=VOUCH_ISSUER,
+                # Deliberately unaudienced, unlike the other MCP examples.
+                #
+                # This broker forwards the caller's token verbatim to Vouch's
+                # /v1/credentials/* endpoints, and Vouch rejects a token narrowed to
+                # any audience other than itself. So the broker cannot both require a
+                # token minted for the broker and then spend that token at Vouch.
+                #
+                # The correct fix is RFC 8693 token exchange: accept a token audienced
+                # at this broker, exchange it for one audienced at Vouch, and forward
+                # only the exchanged token. Until that lands, this server accepts any
+                # valid Vouch access token, which is weaker than remote-server-py.
                 options={'verify_aud': False},
             )
             _current_claims.set(payload)

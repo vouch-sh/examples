@@ -9,7 +9,7 @@ This example demonstrates:
 
 The server exposes tools demonstrating identity-aware MCP patterns:
 
-- **`whoami`** — Returns the authenticated user's email, `hardware_verified`, and `hardware_aaguid` claims
+- **`whoami`** — Returns the authenticated user's email, `hardware_verified`, `acr`, and `amr` claims
 - **`sensitive-action`** — Gated on `hardware_verified`: returns an error if the user's session lacks hardware key verification
 - **`introspect-token`** — Documents the token introspection pattern for opaque access tokens (vs JWT verification for ID tokens)
 
@@ -18,7 +18,7 @@ The server exposes tools demonstrating identity-aware MCP patterns:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
-| `VOUCH_AUDIENCE` | No | Expected token audience (defaults to server URL) |
+| `VOUCH_AUDIENCE` | No | This server's RFC 9728 resource identifier. Published in the metadata document and enforced as the token's `aud`. Defaults to `http://localhost:$PORT`; set it when the public URL differs. |
 | `VOUCH_CLIENT_ID` | For introspection | OAuth client ID (required by `introspect-token` tool) |
 | `VOUCH_CLIENT_SECRET` | For introspection | OAuth client secret (required by `introspect-token` tool) |
 

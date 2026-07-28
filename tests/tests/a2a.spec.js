@@ -51,6 +51,11 @@ for (const example of A2A_EXAMPLES) {
           VOUCH_CLIENT_ID: a2aApp.client_id,
           VOUCH_CLIENT_SECRET: a2aApp.client_secret,
           VOUCH_REDIRECT_URI: callbackUrl,
+          // The container listens on 3000 internally but is published on a random
+          // host port, so it cannot derive its own resource identifier. This is the
+          // value clients send as the RFC 8707 `resource` parameter and the value
+          // the server validates `aud` against.
+          VOUCH_AUDIENCE: baseUrl,
         },
       });
 
@@ -120,6 +125,7 @@ for (const example of A2A_EXAMPLES) {
         clientId: tokenApp.client_id,
         clientSecret: tokenApp.client_secret,
         redirectUri: callbackUrl,
+        resource: baseUrl,
       });
 
       await context.close();

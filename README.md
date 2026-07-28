@@ -137,14 +137,39 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 
 ## Custom Claims
 
-Vouch access tokens ([RFC 9068](https://datatracker.ietf.org/doc/html/rfc9068) JWTs) include these additional claims:
+Vouch access tokens are [RFC 9068](https://datatracker.ietf.org/doc/html/rfc9068) JWTs
+(`typ: at+jwt`), signed with ES256 and verifiable against `{VOUCH_ISSUER}/oauth/jwks`.
+Alongside the standard claims they carry:
 
-| Claim | Type | Description |
-|-------|------|-------------|
-| `hardware_verified` | boolean | Always `true` for Vouch sessions — confirms a hardware key was used |
-| `hardware_aaguid` | string | Identifies the authenticator hardware model |
+| Claim | Type | Where | Description |
+|-------|------|-------|-------------|
+| `acr` | string | access token + id_token | `urn:nist:authentication:assurance-level:aal3` |
+| `amr` | string[] | access token + id_token | Authentication methods, e.g. `["hwk","pin","user"]`. `hwk` is [RFC 8176](https://www.rfc-editor.org/rfc/rfc8176) for a hardware-secured key |
+| `hardware_verified` | boolean | access token only | Vouch-specific; `true` when a hardware key was used |
 
-These claims are **not** in the OIDC id_token or userinfo response. Examples decode the access token JWT payload to read them.
+Prefer `acr` and `amr` where you can — they are standard, they appear in Vouch's
+`claims_supported`, and they are present on both tokens. `hardware_verified` is
+equivalent but Vouch-specific and absent from the id_token.
+
+> [!IMPORTANT]
+> **Verify the token before trusting any of these claims.** Decoding a JWT payload
+> without checking its signature means trusting whatever the caller sent. Resource
+> servers must additionally validate `aud` — see below.
+
+## Audience and Resource Indicators
+
+By default an access token's `aud` is the **requesting client's own `client_id`**, which a
+resource server has no way to anticipate. To let a server validate the audience, the client
+requests a specific resource with the [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)
+`resource` parameter at the authorization endpoint, and Vouch narrows `aud` to that value.
+
+The MCP and A2A examples publish their resource identifier in their metadata
+([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) and validate `aud` against the same
+value, so a token minted for a different client is rejected. Set `VOUCH_AUDIENCE` when the
+server's public URL differs from its listening port.
+
+They also require `typ: at+jwt`, which structurally rejects ID tokens. An ID token is not a
+bearer credential and must never be accepted as one.
 
 ## Testing
 

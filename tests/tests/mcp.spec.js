@@ -79,6 +79,11 @@ for (const example of MCP_EXAMPLES) {
           VOUCH_CLIENT_ID: mcpApp.client_id,
           VOUCH_CLIENT_SECRET: mcpApp.client_secret,
           VOUCH_REDIRECT_URI: callbackUrl,
+          // The container listens on 3000 internally but is published on a random
+          // host port, so it cannot derive its own resource identifier. This is the
+          // value clients send as the RFC 8707 `resource` parameter and the value
+          // the server validates `aud` against.
+          VOUCH_AUDIENCE: baseUrl,
         },
       });
 
@@ -129,6 +134,54 @@ for (const example of MCP_EXAMPLES) {
       expect(res.status).toBe(401);
     });
 
+    test("rejects tokens minted for a different audience", async ({ browser }) => {
+      if (example.name === "mcp-credential-broker") {
+        // This broker forwards the caller's token to Vouch's /v1/credentials/*
+        // endpoints, which reject audience-narrowed tokens, so it cannot require
+        // one. See the comment in mcp/credential-broker/server.py.
+        test.skip();
+        return;
+      }
+
+      const otherApp = await createApp(creds, {
+        name: `${APP_PREFIX}wrongaud-${example.name}`,
+        applicationType: "web",
+        redirectUris: [callbackUrl],
+      });
+
+      const context = await browser.newContext();
+      await setupContext(context, cookie);
+      try {
+        // No `resource`, so `aud` is this client's own client_id rather than the
+        // server's resource identifier. Signature, issuer and expiry are all valid;
+        // only the audience is wrong.
+        const foreign = await obtainAccessToken(context, {
+          clientId: otherApp.client_id,
+          clientSecret: otherApp.client_secret,
+          redirectUri: callbackUrl,
+        });
+
+        const res = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: { ...MCP_HEADERS, Authorization: `Bearer ${foreign}` },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2024-11-05",
+              capabilities: {},
+              clientInfo: { name: "test", version: "1.0" },
+            },
+          }),
+        });
+        expect(res.status).toBe(401);
+      } finally {
+        await context.close();
+        await deleteApp(creds, otherApp.id);
+      }
+    });
+
     test("accepts valid bearer token and responds to MCP", async ({
       browser,
     }) => {
@@ -146,6 +199,7 @@ for (const example of MCP_EXAMPLES) {
         clientId: tokenApp.client_id,
         clientSecret: tokenApp.client_secret,
         redirectUri: callbackUrl,
+        resource: baseUrl,
       });
 
       await context.close();
@@ -196,6 +250,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
+          resource: baseUrl,
         });
 
         await context.close();
@@ -287,6 +342,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
+          resource: baseUrl,
         });
 
         await context.close();

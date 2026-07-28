@@ -260,20 +260,23 @@ async function obtainTokens(context, opts) {
 /**
  * Obtain a Bearer token for a resource server by running an Authorization Code flow.
  *
- * NOTE: this currently returns the ID token rather than the access token. That is
- * wrong — an ID token is not a bearer credential and accepting one is a token
- * substitution weakness — but the four resource-server examples still verify tokens
- * in a way that depends on it. `claims.spec.js` establishes the real shape of a Vouch
- * access token; once the resource servers validate `aud` and `typ`, this must return
- * `tokens.access_token`.
+ * Returns the access token. Vouch access tokens are ES256-signed RFC 9068 JWTs
+ * (`typ: at+jwt`) verifiable against /oauth/jwks — see tests/tests/claims.spec.js.
+ * Pass `resource` so `aud` is narrowed to the server under test; without it the
+ * audience is the calling client's own client_id and the server has nothing to check.
  *
  * @param {import("@playwright/test").BrowserContext} context
  * @param {Parameters<typeof obtainTokens>[1]} opts
- * @returns {Promise<string>} a JWT
+ * @returns {Promise<string>} access token (JWT)
  */
 async function obtainAccessToken(context, opts) {
   const tokens = await obtainTokens(context, opts);
-  return tokens.id_token || tokens.access_token;
+  if (!tokens.access_token) {
+    throw new Error(
+      `Token endpoint returned no access_token: ${JSON.stringify(Object.keys(tokens))}`,
+    );
+  }
+  return tokens.access_token;
 }
 
 module.exports = {
