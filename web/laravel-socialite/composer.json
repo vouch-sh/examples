@@ -2,12 +2,12 @@
     "name": "vouch/laravel-socialite-example",
     "type": "project",
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "firebase/php-jwt": "^7.1",
-        "kovah/laravel-socialite-oidc": "^0.7",
-        "laravel/framework": "^12.51",
-        "laravel/socialite": "^5.0",
-        "socialiteproviders/manager": "^4.0"
+        "kovah/laravel-socialite-oidc": "^0.8",
+        "laravel/framework": "^13.23",
+        "laravel/socialite": "^5.29",
+        "socialiteproviders/manager": "^4.9"
     },
     "autoload": {
         "psr-4": {
