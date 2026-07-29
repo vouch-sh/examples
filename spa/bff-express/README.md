@@ -39,3 +39,25 @@ Open [http://localhost:3000](http://localhost:3000).
 | `VOUCH_CLIENT_ID` | Yes | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Yes | OAuth client secret |
 | `VOUCH_REDIRECT_URI` | No | Callback URL (default: `http://localhost:3000/auth/callback`) |
+
+## Sign-out
+
+Sign-out is a two-step operation, because neither endpoint alone is sufficient.
+
+**RP-Initiated Logout** (`end_session_endpoint`) ends the Vouch *browser* session.
+The app redirects to `/oauth/logout` with `id_token_hint` and
+`post_logout_redirect_uri`. Vouch shows a confirmation page and only redirects back
+when the hint verifies **and** the URI is registered on the client — otherwise it
+finishes on its own signed-out page rather than following an unvalidated URI.
+
+**Token revocation** ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009)) is still
+needed, because RP-initiated logout deletes only the browser session — the access
+token this app holds stays valid at Vouch and at every resource server until it
+expires.
+
+> [!WARNING]
+> Vouch revokes **by user, not by token**. One revocation call signs the user out of
+> every device and every other application, including the Vouch CLI. That is
+> deliberate for a hardware-attested identity provider — "human presence attestation
+> means logout = full logout" — but it is broader than RFC 7009 describes, and it
+> will surprise you if you expect token-scoped revocation.

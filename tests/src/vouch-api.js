@@ -217,7 +217,7 @@ async function fetchWithRetry(url, init, maxRetries = 3) {
  * Public app types need to default to `none` in Vouch before spa.spec.js can pass.
  *
  * @param {{ token: string, dpopKey: crypto.KeyObject }} creds
- * @param {{ name: string, applicationType: string, redirectUris: string[], accessScope?: string }} opts
+ * @param {{ name: string, applicationType: string, redirectUris: string[], accessScope?: string, postLogoutRedirectUris?: string[] }} opts
  * @returns {Promise<{ id: string, client_id: string, client_secret: string|null, name: string, application_type: string, access_scope: string }>}
  */
 async function createApp(creds, opts) {
@@ -230,6 +230,9 @@ async function createApp(creds, opts) {
       name: opts.name,
       application_type: opts.applicationType,
       redirect_uris: opts.redirectUris,
+      // RP-initiated logout only redirects back to a registered URI; without this
+      // Vouch correctly ends on its own signed-out page instead.
+      post_logout_redirect_uris: opts.postLogoutRedirectUris,
       access_scope: opts.accessScope || "personal",
     }),
   });

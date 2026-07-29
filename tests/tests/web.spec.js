@@ -35,6 +35,7 @@ for (const example of WEB_EXAMPLES) {
         name: appName,
         applicationType: "web",
         redirectUris: [callbackUrl],
+        postLogoutRedirectUris: [`${baseUrl}/`],
       });
 
       // Build and run Docker container
@@ -160,12 +161,30 @@ for (const example of WEB_EXAMPLES) {
         await expect(page.locator("body")).toContainText("active", {
           timeout: 5_000,
         });
+        await expect(page.locator("body")).toContainText('"active": true', {
+          timeout: 5_000,
+        });
       }
 
       await context.close();
     });
 
     test("logout flow", async ({ browser }) => {
+      if (example.rpInitiatedLogout) {
+        // Cannot be exercised unattended. These examples revoke their access token
+        // on sign-out (RFC 7009), and Vouch revokes by user rather than by token --
+        // `delete_sessions_for_user` in services/oidc/introspection.rs. This suite
+        // injects the developer's own Vouch session cookie, so clicking sign-out
+        // would delete that session along with every other one they hold: the rest
+        // of the run fails with "Session not found or revoked" and they have to run
+        // `vouch login` again.
+        //
+        // The examples are correct and deliberately not watered down for the
+        // harness. Verify them by hand, or against a throwaway Vouch account.
+        test.skip();
+        return;
+      }
+
       const context = await browser.newContext();
       await setupContext(context, cookie);
       const page = await context.newPage();
@@ -195,9 +214,10 @@ for (const example of WEB_EXAMPLES) {
       const logoutElement = page.locator(example.logoutSelector).first();
       await expect(logoutElement).toBeVisible({ timeout: 5_000 });
       await logoutElement.click();
+      await page.waitForLoadState("networkidle", { timeout: 10_000 });
+
 
       // Verify returned to unauthenticated state
-      await page.waitForLoadState("networkidle", { timeout: 5_000 });
       const loginAgain = page.locator(example.loginSelector).first();
       await expect(loginAgain).toBeVisible({ timeout: 5_000 });
 
