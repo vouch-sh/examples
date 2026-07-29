@@ -14,6 +14,9 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/auth/vouch/callback",
     logoutMethod: "GET",
+    // Signs out at Vouch too, so logout goes via the end_session endpoint and
+    // stops on Vouch's confirmation page before returning here.
+    rpInitiatedLogout: true,
   },
   {
     name: "nextjs-nextauth",
@@ -120,6 +123,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/auth/logout"]',
     callbackPath: "/auth/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
 ];
 

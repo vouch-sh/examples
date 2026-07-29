@@ -97,7 +97,14 @@ export default function App() {
           <UserProfile auth={auth} />
           <TokenInfo auth={auth} />
           <div style={{ marginTop: '1rem' }}>
-            <button onClick={() => auth.removeUser()}>Sign out</button>
+            {/*
+              signoutRedirect, not removeUser. removeUser only clears local storage,
+              which leaves the Vouch session intact -- the next sign-in completes
+              silently and looks like the sign-out never happened. It also made the
+              post_logout_redirect_uri configured in main.jsx dead config, since
+              nothing ever reached the end_session endpoint.
+            */}
+            <button onClick={() => auth.signoutRedirect()}>Sign out</button>
           </div>
         </div>
       ) : (

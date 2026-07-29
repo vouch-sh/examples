@@ -35,6 +35,14 @@ builder.Services.AddAuthentication(options =>
     options.SaveTokens = true;
     options.GetClaimsFromUserInfoEndpoint = true;
     options.CallbackPath = new PathString(new Uri(redirectUri).AbsolutePath);
+    // Vouch supports PAR (RFC 9126) and .NET would use it automatically, but PAR
+    // changes the authentication model: Vouch requires a fresh FIDO2 assertion for
+    // every PAR authorization, per FAPI 2.0 Section 5.3.2.2 Note 3. An existing
+    // browser session no longer satisfies the request, so the user must touch their
+    // security key on each sign-in.
+    //
+    // That is the right trade for a high-assurance app and the wrong one for a
+    // minimal example, so it is off here. Switch to `Require` to opt in.
     options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
     options.ResponseMode = OpenIdConnectResponseMode.Query;
     options.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
