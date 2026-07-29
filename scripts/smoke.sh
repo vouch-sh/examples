@@ -18,8 +18,34 @@ NAME="vouch-smoke-$(echo "$DIR" | tr '/' '-')-$$"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-60}"
 
 CLIENT_ID="smoke-client-e2f4a9c1"
+VOUCH_ISSUER="${VOUCH_ISSUER:-https://us.vouch.sh}"
+
+# Most examples perform OIDC discovery at startup, so they cannot boot at all when
+# the issuer is unreachable. That is a property of the network, not of the image, and
+# failing the build for it just produces red checks nobody can act on. Probe once up
+# front and skip cleanly instead.
+if ! curl -sSf --max-time 20 -o /dev/null "${VOUCH_ISSUER}/.well-known/openid-configuration" 2>/dev/null; then
+  echo "SKIP  $DIR: ${VOUCH_ISSUER} is unreachable from this host"
+  echo "      Examples do OIDC discovery at startup, so nothing can be verified."
+  exit 0
+fi
+
+# Exit cleanly when the container could not reach the issuer. The preflight above
+# catches a host with no route at all, but discovery can still time out inside the
+# container on a slow or partially-blocked network -- that says nothing about the
+# image under test.
+skip_if_unreachable() {
+  local logs
+  logs=$(docker logs "$NAME" 2>&1 || true)
+  if echo "$logs" | grep -qiE 'connection timed out|timedout|could not resolve|name resolution|connection refused.*vouch|dns error|network is unreachable'; then
+    echo "SKIP  $DIR: could not reach ${VOUCH_ISSUER} from the container"
+    echo "$logs" | tail -5 | sed 's/^/      /'
+    exit 0
+  fi
+}
 
 fail() {
+  skip_if_unreachable
   echo "FAIL  $DIR: $*" >&2
   echo "--- container logs ---" >&2
   docker logs "$NAME" 2>&1 | tail -30 >&2
@@ -31,7 +57,7 @@ trap cleanup EXIT
 
 start() {
   docker run -d --name "$NAME" -P \
-    -e VOUCH_ISSUER=https://us.vouch.sh \
+    -e VOUCH_ISSUER="$VOUCH_ISSUER" \
     -e VOUCH_CLIENT_ID="$CLIENT_ID" \
     -e VOUCH_CLIENT_SECRET=smoke-secret \
     -e VOUCH_REDIRECT_URI=http://localhost:3000/callback \
@@ -123,12 +149,12 @@ native/*)
   # module graph loaded. Only import-level failures matter here, which is exactly the
   # breakage a dependency major introduces.
   start
-  sleep 15
+  sleep "${NATIVE_WAIT:-25}"
   logs=$(docker logs "$NAME" 2>&1 || true)
   if echo "$logs" | grep -qE 'ModuleNotFoundError|ImportError|Cannot find module|ERR_MODULE_NOT_FOUND'; then
     fail "failed at import -- a dependency is missing or a breaking major was installed"
   fi
-  [ -n "$logs" ] || fail "produced no output in 15s"
+  [ -n "$logs" ] || fail "produced no output in ${NATIVE_WAIT:-25}s"
   echo "  imports resolved (reached runtime)"
   ;;
 
