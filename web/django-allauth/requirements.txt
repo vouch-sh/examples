@@ -6,7 +6,7 @@ asgiref==3.12.1
     #   django-allauth
 certifi==2026.7.22
     # via requests
-cffi==2.1.0 ; platform_python_implementation != 'PyPy'
+cffi==2.1.0
     # via cryptography
 charset-normalizer==3.4.9
     # via requests
@@ -14,23 +14,21 @@ cryptography==49.0.0
     # via pyjwt
 django==6.0.7
     # via
-    #   -r web/django-allauth/requirements.in
+    #   -r requirements.in
     #   django-allauth
-django-allauth==65.18.0
-    # via -r web/django-allauth/requirements.in
+django-allauth[socialaccount]==65.18.0
+    # via -r requirements.in
 idna==3.18
     # via requests
 oauthlib==3.3.1
     # via django-allauth
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.0
     # via cffi
-pyjwt==2.13.0
+pyjwt[crypto]==2.13.0
     # via django-allauth
 requests==2.34.2
     # via django-allauth
-sqlparse==0.5.5
-    # via django
-tzdata==2026.3 ; sys_platform == 'win32'
+sqlparse==0.6.0
     # via django
 urllib3==2.7.0
     # via requests
