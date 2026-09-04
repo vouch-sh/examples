@@ -25,6 +25,8 @@ updates:
       - "/web/express-openid"
       - "/web/nextjs-nextauth"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "pip"
@@ -40,6 +42,8 @@ updates:
       - "/web/fastapi-authlib"
       - "/web/flask-authlib"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "docker"
@@ -72,12 +76,16 @@ updates:
       - "/web/rails-omniauth"
       - "/web/spring-boot"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "gomod"
     directories:
       - "/web/go-oidc"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "cargo"
@@ -85,30 +93,40 @@ updates:
       - "/native/rust"
       - "/web/axum-openidconnect"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "bundler"
     directories:
       - "/web/rails-omniauth"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "composer"
     directories:
       - "/web/laravel-socialite"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "maven"
     directories:
       - "/web/spring-boot"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   - package-ecosystem: "nuget"
     directories:
       - "/web/aspnet-core"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
 
   # Workflow actions are SHA-pinned and enforced by secure_workflows.yml, so without
@@ -118,4 +136,6 @@ updates:
     directories:
       - "/"
     patterns: ["*"]
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "all"
