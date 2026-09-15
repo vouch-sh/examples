@@ -4,6 +4,8 @@
 
 This example demonstrates how to integrate Vouch OIDC authentication into an Express application using [openid-client](https://github.com/panva/openid-client) with PKCE.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Environment Variables
 
 | Variable | Description |

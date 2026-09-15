@@ -4,6 +4,8 @@
 
 Uses [coreos/go-oidc](https://github.com/coreos/go-oidc) for OIDC discovery and ID token verification with Go's standard `net/http`.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Environment Variables
 
 | Variable | Required | Description |

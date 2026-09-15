@@ -4,6 +4,8 @@
 
 This example demonstrates how to authenticate users with Vouch OIDC using Rails and the `omniauth-openid-connect` gem.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Environment Variables
 
 | Variable | Description |

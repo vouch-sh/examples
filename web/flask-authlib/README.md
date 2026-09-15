@@ -2,6 +2,8 @@
 
 Web Application (Confidential Client) using Flask and Authlib for Vouch OIDC authentication.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Configuration
 
 Set the following environment variables:

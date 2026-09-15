@@ -2,6 +2,8 @@
 
 **Integration type:** Web Application (Confidential Client)
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Setup
 
 Set the following environment variables:

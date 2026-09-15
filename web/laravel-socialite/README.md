@@ -4,6 +4,8 @@
 
 This example demonstrates OpenID Connect authentication with Vouch using Laravel and the Socialite OIDC provider.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Configuration
 
 Set the following environment variables:

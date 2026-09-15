@@ -2,6 +2,8 @@
 
 A Backend-for-Frontend (BFF) example implementing the [IETF recommended architecture](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-browser-based-apps#section-6.1) for browser-based OAuth applications.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## How it works
 
 The Express backend acts as a confidential OAuth client. The browser never sees access tokens — it only receives an `HttpOnly` session cookie.

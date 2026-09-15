@@ -4,6 +4,8 @@
 
 Uses [oidc-client-ts](https://github.com/authts/oidc-client-ts) with SvelteKit in static adapter mode (SPA). PKCE is used automatically — no client secret needed.
 
+**Vouch application type:** SPA (public client — no client secret, authorized for the authorization code grant with PKCE).
+
 ## Environment Variables
 
 | Variable | Required | Description |
