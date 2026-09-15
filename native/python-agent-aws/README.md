@@ -4,6 +4,8 @@ Native/CLI agent that authenticates via the Device Authorization Grant (RFC 8628
 
 No client secret is needed. The user authenticates by visiting a URL in their browser and entering a code.
 
+**Vouch application type:** Native (public client — the only type authorized for the device authorization grant; a Web or SPA application is refused at `/oauth/device` with `unauthorized_client`).
+
 ## How It Works
 
 1. **Device Authorization** -- The agent initiates the device flow and displays a verification URL and user code.

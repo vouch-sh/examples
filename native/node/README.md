@@ -4,6 +4,8 @@ Native/CLI Application (Public Client) using the Device Authorization Grant (RFC
 
 No client secret is needed. The user authenticates by visiting a URL in their browser and entering a code.
 
+**Vouch application type:** Native (public client — the only type authorized for the device authorization grant; a Web or SPA application is refused at `/oauth/device` with `unauthorized_client`).
+
 ## Environment Variables
 
 - `VOUCH_ISSUER` - OIDC issuer URL (default: `https://us.vouch.sh`)

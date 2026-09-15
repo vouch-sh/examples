@@ -208,13 +208,15 @@ async function fetchWithRetry(url, init, maxRetries = 3) {
 /**
  * Create a Vouch OAuth application via the REST API.
  *
- * KNOWN ISSUE (server side): applications created with `application_type: "spa"` or
- * `"native"` are issued no client_secret, yet come back with
- * `token_endpoint_auth_method: "client_secret_basic"`. The token endpoint then answers
- * `401 invalid_client: client authentication required`, so no public-client
- * authorization-code flow can complete and all five spa.spec.js login tests fail.
- * Passing `token_endpoint_auth_method: "none"` in this request is silently ignored.
- * Public app types need to default to `none` in Vouch before spa.spec.js can pass.
+ * `applicationType` is the only knob for how the client may authenticate and which
+ * grants it may use — the request has no `token_endpoint_auth_method` or `grant_types`
+ * field, and Vouch derives both from the type. `"web"` and `"service"` are issued a
+ * client_secret and `token_endpoint_auth_method: "client_secret_basic"`; `"spa"` and
+ * `"native"` are public clients with no secret and `"none"`. Grants follow the same
+ * split: every type but `"service"` gets `authorization_code`, `"native"` also gets
+ * RFC 8628 `device_code`, and `"service"` gets `client_credentials`. So a spec that
+ * drives a device flow must create a `"native"` app, or `/oauth/device` answers
+ * `unauthorized_client`.
  *
  * @param {{ token: string, dpopKey: crypto.KeyObject }} creds
  * @param {{ name: string, applicationType: string, redirectUris: string[], accessScope?: string, postLogoutRedirectUris?: string[] }} opts

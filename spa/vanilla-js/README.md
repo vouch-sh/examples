@@ -2,6 +2,8 @@
 
 Single Page Application (Public Client) using OIDC with PKCE. No client secret needed.
 
+**Vouch application type:** SPA (public client — no client secret, authorized for the authorization code grant with PKCE).
+
 ## Build and Run
 
 ```bash

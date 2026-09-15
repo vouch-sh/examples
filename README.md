@@ -7,9 +7,28 @@
 
 ## Prerequisites
 
-- A Vouch organization with an OIDC application configured
+- A Vouch organization with an OIDC application configured, created with the [application type](#application-types) the example calls for
 - Docker installed on your machine
 - Your `CLIENT_ID`, `REDIRECT_URI`, and (for web apps) `CLIENT_SECRET` from the Vouch dashboard
+
+## Application Types
+
+Vouch derives an application's client authentication method and its allowed grants from the
+application type chosen when the application is created, so an example only works against an
+application of the matching type.
+
+| Examples | Application type | Client authentication | Grants |
+|----------|------------------|-----------------------|--------|
+| [`web/`](web), [`spa/bff-express`](spa/bff-express) | Web | Client secret | Authorization code |
+| [`spa/`](spa) (all others) | SPA | None (PKCE) | Authorization code |
+| [`native/`](native) | Native | None (PKCE) | Authorization code, device authorization ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) |
+
+> [!IMPORTANT]
+> Native is the only type authorized for the device authorization grant. A CLI example pointed at
+> a Web or SPA application is refused at `/oauth/device` with `unauthorized_client`.
+
+The MCP and A2A examples are resource servers, not OAuth clients: they validate the tokens Vouch
+issued to their callers and register no application of their own.
 
 ## Structure
 

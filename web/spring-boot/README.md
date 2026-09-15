@@ -2,6 +2,8 @@
 
 Web Application (Confidential Client) using Vouch OIDC.
 
+**Vouch application type:** Web (confidential client — issued a client secret and authorized for the authorization code grant).
+
 ## Environment Variables
 
 | Variable | Description |
