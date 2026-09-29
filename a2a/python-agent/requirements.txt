@@ -68,7 +68,9 @@ pyasn1-modules==0.4.2
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 pydantic==2.13.5
-    # via a2a-sdk
+    # via
+    #   -r requirements.in
+    #   a2a-sdk
 pydantic-core==2.46.5
     # via pydantic
 pyjwt==2.15.1

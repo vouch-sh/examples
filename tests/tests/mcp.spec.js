@@ -1,5 +1,14 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const crypto = require("node:crypto");
+const {
+  loadCookie,
+  loadToken,
+  loadDpopKey,
+  createDpopProof,
+  createApp,
+  deleteApp,
+  cleanupStaleApps,
+} = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, obtainAccessToken } = require("../src/oidc-flow");
 const { MCP_EXAMPLES } = require("../src/examples");
@@ -33,6 +42,19 @@ async function parseMcpResponse(res) {
   return res.json();
 }
 
+function initializeRequest() {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "test", version: "1.0" },
+    },
+  };
+}
+
 let cookie;
 let creds;
 
@@ -50,6 +72,10 @@ for (const example of MCP_EXAMPLES) {
     const appName = `${APP_PREFIX}${example.name}`;
     let port;
     let baseUrl;
+    // The canonical RFC 9728 resource identifier: the WHATWG-normalised URL, trailing
+    // slash included. Vouch copies `resource` into `aud` verbatim, so tokens must be
+    // requested with exactly the value the server publishes and checks.
+    let resource;
     let callbackUrl;
     let mcpApp;
     // Separate web app for obtaining an access token
@@ -63,6 +89,7 @@ for (const example of MCP_EXAMPLES) {
     test.beforeAll(async () => {
       port = await getRandomPort();
       baseUrl = `http://localhost:${port}`;
+      resource = new URL(baseUrl).href;
       callbackUrl = `${baseUrl}/callback`;
 
       // Create the MCP server's Vouch app
@@ -116,13 +143,13 @@ for (const example of MCP_EXAMPLES) {
       expect(res.status).toBe(200);
 
       const metadata = await res.json();
-      expect(metadata).toHaveProperty("authorization_servers");
-      // Normalize trailing slashes for comparison (pydantic AnyHttpUrl adds them)
-      const issuerBase = VOUCH_ISSUER_URL.replace(/\/$/, "");
-      const hasIssuer = metadata.authorization_servers.some(
-        (s) => s.replace(/\/$/, "") === issuerBase,
-      );
-      expect(hasIssuer).toBe(true);
+      // Exact string comparisons, no slash normalisation. Clients match
+      // authorization_servers against the issuer's `iss` (RFC 8414 §3.3) and send
+      // `resource` back as the RFC 8707 parameter, which Vouch copies verbatim into
+      // `aud`, so "equivalent" URLs that differ by a trailing slash do not match.
+      expect(metadata.authorization_servers).toEqual([VOUCH_ISSUER_URL]);
+      expect(metadata.resource).toBe(resource);
+      expect(metadata.scopes_supported).toEqual(["openid", "email"]);
     });
 
     test("rejects unauthenticated requests", async () => {
@@ -419,5 +446,82 @@ for (const example of MCP_EXAMPLES) {
       const content = JSON.stringify(toolBody.result);
       expect(content).toContain("hardware_verified");
     });
+
+    if (example.dpop) {
+      test("401 challenges advertise Bearer and DPoP with resource_metadata", async () => {
+        const res = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: MCP_HEADERS,
+          body: JSON.stringify(initializeRequest()),
+        });
+        expect(res.status).toBe(401);
+        const challenge = res.headers.get("www-authenticate");
+        const metadataUrl = `${baseUrl}/.well-known/oauth-protected-resource`;
+        expect(challenge).toMatch(/^Bearer /);
+        expect(challenge).toMatch(/, DPoP /);
+        expect(challenge).toContain(`resource_metadata="${metadataUrl}"`);
+        // RFC 6750 §3.1: no error code when the request carried no credentials.
+        expect(challenge).not.toContain("error=");
+      });
+
+      test("accepts a DPoP-bound token only with a fresh matching proof", async ({ browser }) => {
+        const dpopApp = await createApp(creds, {
+          name: `${APP_PREFIX}dpop-${example.name}`,
+          applicationType: "web",
+          redirectUris: [callbackUrl],
+        });
+        const context = await browser.newContext();
+        await setupContext(context, cookie);
+        try {
+          const { privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
+          const bound = await obtainAccessToken(context, {
+            clientId: dpopApp.client_id,
+            clientSecret: dpopApp.client_secret,
+            redirectUri: callbackUrl,
+            resource,
+            dpopKey: privateKey,
+          });
+          const payload = JSON.parse(Buffer.from(bound.split(".")[1], "base64url"));
+          expect(payload.cnf?.jkt).toBeTruthy();
+
+          const url = `${baseUrl}/mcp`;
+          const send = (headers) =>
+            fetch(url, {
+              method: "POST",
+              headers: { ...MCP_HEADERS, ...headers },
+              body: JSON.stringify(initializeRequest()),
+            });
+          const proof = createDpopProof(privateKey, { method: "POST", url, token: bound });
+
+          const ok = await send({ Authorization: `DPoP ${bound}`, DPoP: proof });
+          expect(ok.status).toBe(200);
+          expect(await parseMcpResponse(ok)).toHaveProperty("jsonrpc", "2.0");
+
+          // RFC 9449 §11.1: a proof is single-use.
+          const replay = await send({ Authorization: `DPoP ${bound}`, DPoP: proof });
+          expect(replay.status).toBe(401);
+          expect(replay.headers.get("www-authenticate")).toContain(
+            'DPoP error="invalid_dpop_proof"',
+          );
+
+          // RFC 9449 §7.2: a bound token presented as Bearer skips proof of possession.
+          const asBearer = await send({ Authorization: `Bearer ${bound}` });
+          expect(asBearer.status).toBe(401);
+
+          // A valid proof from a different key does not match cnf.jkt.
+          const { privateKey: otherKey } = crypto.generateKeyPairSync("ec", {
+            namedCurve: "P-256",
+          });
+          const wrongKey = await send({
+            Authorization: `DPoP ${bound}`,
+            DPoP: createDpopProof(otherKey, { method: "POST", url, token: bound }),
+          });
+          expect(wrongKey.status).toBe(401);
+        } finally {
+          await context.close();
+          await deleteApp(creds, dpopApp.id);
+        }
+      });
+    }
   });
 }
