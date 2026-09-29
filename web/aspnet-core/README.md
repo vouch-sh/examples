@@ -35,7 +35,17 @@ http://localhost:3000/callback
 
 ## Claims
 
-The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` and `cnf.jkt` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+
+## DPoP
+
+Access tokens are sender-constrained with [DPoP (RFC 9449)](https://www.rfc-editor.org/rfc/rfc9449). ASP.NET Core's OpenID Connect handler has no DPoP support, so `DPoPHandler.cs` is installed as its `BackchannelHttpHandler`. It holds an ES256 key pair generated at startup:
+
+- Token request: adds a DPoP proof. Vouch always answers the first attempt with `use_dpop_nonce` and a `DPoP-Nonce` header, so the handler retries once with that nonce.
+- UserInfo request (`GetClaimsFromUserInfoEndpoint`): switches the `Authorization` scheme from `Bearer` to `DPoP` and binds the proof to the token with `ath`. Vouch rejects a DPoP-bound token presented as `Bearer`.
+- Discovery and JWKS fetches carry no token and are sent unchanged.
+
+The access token carries `cnf.jkt`, the thumbprint of that key, which the signed-in page shows.
 
 ## Sign-out
 

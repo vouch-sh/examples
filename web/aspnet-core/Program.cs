@@ -45,6 +45,8 @@ builder.Services.AddAuthentication(options =>
     // minimal example, so it is off here. Switch to `Require` to opt in.
     options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
     options.ResponseMode = OpenIdConnectResponseMode.Query;
+    // DPoP-bound access tokens (RFC 9449); see DPoPHandler.
+    options.BackchannelHttpHandler = new DPoPHandler(new HttpClientHandler());
     options.Events = new Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectEvents
     {
         OnRedirectToIdentityProvider = context =>
@@ -124,6 +126,13 @@ app.MapGet("/", async (HttpContext context) =>
         var hwVerified = verified is not null
             && verified.TryGetPayloadValue<bool>("hardware_verified", out var hw) && hw;
         var hwBadge = hwVerified ? "<p><strong>Hardware Verified</strong></p>" : "";
+        // Thumbprint of the DPoP key the access token is bound to (RFC 9449 section 6).
+        var cnf = verified?.Claims.FirstOrDefault(c => c.Type == "cnf")?.Value;
+        var cnfJkt = cnf is null
+            ? "N/A"
+            : System.Text.Json.JsonDocument.Parse(cnf).RootElement.TryGetProperty("jkt", out var jkt)
+                ? jkt.GetString()
+                : "N/A";
 
         return Results.Content(
             $"""
@@ -139,6 +148,7 @@ app.MapGet("/", async (HttpContext context) =>
             <li>amr: {(amr == "" ? "N/A" : amr)}</li>
             <li>acr: {acr}</li>
             <li>hardware_verified: {hwVerified}</li>
+            <li>cnf.jkt: {cnfJkt}</li>
             </ul>
             <form method="post" action="/logout"><button type="submit">Sign out</button></form>
             </body></html>
