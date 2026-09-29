@@ -87,7 +87,7 @@ Secure AI agent communication using Vouch for hardware-backed authentication.
 
 | Protocol | Directory | Description |
 |----------|-----------|-------------|
-| MCP Remote Server (TypeScript) | [`mcp/remote-server-ts`](mcp/remote-server-ts) | [Model Context Protocol](https://modelcontextprotocol.io/) server with Bearer auth + Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) |
+| MCP Remote Server (TypeScript) | [`mcp/remote-server-ts`](mcp/remote-server-ts) | [Model Context Protocol](https://modelcontextprotocol.io/) server (2026-07-28) with Bearer + DPoP auth and Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) |
 | MCP Remote Server (Python) | [`mcp/remote-server-py`](mcp/remote-server-py) | Same as above, in Python with FastMCP |
 | MCP Credential Broker (Python) | [`mcp/credential-broker`](mcp/credential-broker) | MCP server that brokers AWS, GitHub, and SSH credentials on behalf of the authenticated user |
 | A2A Agent (Python) | [`a2a/python-agent`](a2a/python-agent) | [Agent-to-Agent](https://github.com/a2aproject/A2A) agent with OpenID Connect security scheme in the Agent Card |
@@ -146,7 +146,9 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 |---------|----------|
 | Hardware key enforcement | [`web/express-openid`](web/express-openid) (`/protected`), [`web/flask-authlib`](web/flask-authlib) (`/protected`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`sensitive-action` tool) |
 | UserInfo endpoint calls | [`web/express-openid`](web/express-openid), [`web/flask-authlib`](web/flask-authlib), [`native/node`](native/node), [`native/python`](native/python) |
-| Token introspection | [`web/express-openid`](web/express-openid) (`/introspect`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`introspect-token` tool) |
+| Token introspection | [`web/express-openid`](web/express-openid) (`/introspect`) |
+| Local access token (RFC 9068 JWT) validation | [`mcp/remote-server-ts`](mcp/remote-server-ts) (`token-claims` tool) |
+| DPoP-bound access tokens (resource server) | [`mcp/remote-server-ts`](mcp/remote-server-ts) |
 | Post-auth API calls | [`native/node`](native/node), [`native/python`](native/python) |
 | Token expiry display | [`spa/react`](spa/react) |
 | Profile claims display | [`spa/react`](spa/react) |
