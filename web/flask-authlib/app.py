@@ -13,12 +13,12 @@ from jwt import PyJWKClient
 app = Flask(__name__)
 # No fallback: a default secret baked into the source lets anyone forge session
 # cookies for every deployment that forgot to set one.
-app.secret_key = os.environ.get('SECRET_KEY')
+app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
-    raise RuntimeError('SECRET_KEY is required')
+    raise RuntimeError("SECRET_KEY is required")
 
-VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
-VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
+VOUCH_ISSUER = os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh")
+VOUCH_CLIENT_ID = os.environ.get("VOUCH_CLIENT_ID")
 
 # Server-side session store (use a proper store in production). Flask's own session
 # is a signed but readable cookie, so the tokens and claims stay here and the cookie
@@ -28,17 +28,17 @@ SESSIONS = {}
 
 
 def current_session():
-    return SESSIONS.get(session.get('sid'), {})
+    return SESSIONS.get(session.get("sid"), {})
 
 
 oauth = OAuth(app)
 oauth.register(
-    name='vouch',
+    name="vouch",
     client_id=VOUCH_CLIENT_ID,
-    client_secret=os.environ.get('VOUCH_CLIENT_SECRET'),
+    client_secret=os.environ.get("VOUCH_CLIENT_SECRET"),
     server_metadata_url=f"{VOUCH_ISSUER}/.well-known/openid-configuration",
-    client_kwargs={'scope': 'openid email'},
-    code_challenge_method='S256',
+    client_kwargs={"scope": "openid email"},
+    code_challenge_method="S256",
 )
 
 TEMPLATE = """
@@ -100,6 +100,7 @@ PROTECTED_DENIED_TEMPLATE = """
 </html>
 """
 
+
 @functools.cache
 def jwks_client(jwks_uri):
     """One PyJWKClient per JWKS URI, so its key cache survives between logins."""
@@ -116,9 +117,9 @@ def verify_access_token(token):
     The audience is this client's own client_id, which is what Vouch issues when the
     authorization request carries no RFC 8707 `resource` parameter.
     """
-    if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
-        raise ValueError('not an RFC 9068 access token')
-    jwks_uri = oauth.vouch.load_server_metadata()['jwks_uri']
+    if jwt.get_unverified_header(token).get("typ", "").lower() != "at+jwt":
+        raise ValueError("not an RFC 9068 access token")
+    jwks_uri = oauth.vouch.load_server_metadata()["jwks_uri"]
     signing_key = jwks_client(jwks_uri).get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
@@ -142,78 +143,84 @@ USERINFO_TEMPLATE = """
 """
 
 
-@app.route('/')
+@app.route("/")
 def home():
-    user = current_session().get('user')
+    user = current_session().get("user")
     return render_template_string(TEMPLATE, user=user)
 
-def redirect_uri():
-    return os.environ.get('VOUCH_REDIRECT_URI') or url_for('callback', _external=True)
 
-@app.route('/login')
+def redirect_uri():
+    return os.environ.get("VOUCH_REDIRECT_URI") or url_for("callback", _external=True)
+
+
+@app.route("/login")
 def login():
     return oauth.vouch.authorize_redirect(redirect_uri())
 
-@app.route('/callback')
+
+@app.route("/callback")
 def callback():
     token = oauth.vouch.authorize_access_token()
     # Authlib has already verified the ID token; 'userinfo' holds its claims.
-    id_claims = token.get('userinfo')
-    at_claims = verify_access_token(token['access_token'])
+    id_claims = token.get("userinfo")
+    at_claims = verify_access_token(token["access_token"])
     user = {
-        'email': id_claims.get('email'),
-        'email_verified': id_claims.get('email_verified', False),
-        'sub': id_claims.get('sub'),
-        'acr': id_claims.get('acr'),
-        'amr': id_claims.get('amr', []),
-        'hardware_verified': at_claims.get('hardware_verified', False),
+        "email": id_claims.get("email"),
+        "email_verified": id_claims.get("email_verified", False),
+        "sub": id_claims.get("sub"),
+        "acr": id_claims.get("acr"),
+        "amr": id_claims.get("amr", []),
+        "hardware_verified": at_claims.get("hardware_verified", False),
     }
     tokens = {
-        'access_token': token.get('access_token'),
+        "access_token": token.get("access_token"),
         # Kept for RP-initiated logout: Vouch only honours post_logout_redirect_uri
         # when a verified id_token_hint identifies the client.
-        'id_token': token.get('id_token'),
-        'expires_at': token.get('expires_at'),
+        "id_token": token.get("id_token"),
+        "expires_at": token.get("expires_at"),
     }
     sid = secrets.token_urlsafe(32)
-    SESSIONS[sid] = {'user': user, 'tokens': tokens}
+    SESSIONS[sid] = {"user": user, "tokens": tokens}
     # Start from an empty cookie: a fresh id per sign-in rules out session fixation.
     session.clear()
-    session['sid'] = sid
-    return redirect('/')
+    session["sid"] = sid
+    return redirect("/")
 
-@app.route('/protected')
+
+@app.route("/protected")
 def protected():
-    user = current_session().get('user')
+    user = current_session().get("user")
     if not user:
-        return redirect('/login')
-    if not user.get('hardware_verified'):
+        return redirect("/login")
+    if not user.get("hardware_verified"):
         return render_template_string(PROTECTED_DENIED_TEMPLATE), 403
     return render_template_string(
         PROTECTED_TEMPLATE,
-        email=user['email'],
-        acr=user.get('acr') or 'N/A',
-        amr=', '.join(user.get('amr') or []) or 'N/A',
+        email=user["email"],
+        acr=user.get("acr") or "N/A",
+        amr=", ".join(user.get("amr") or []) or "N/A",
     )
 
-@app.route('/userinfo')
+
+@app.route("/userinfo")
 def userinfo():
-    tokens = current_session().get('tokens')
-    if not tokens or not tokens.get('access_token'):
-        return redirect('/login')
+    tokens = current_session().get("tokens")
+    if not tokens or not tokens.get("access_token"):
+        return redirect("/login")
 
     resp = http_requests.get(
-        oauth.vouch.load_server_metadata()['userinfo_endpoint'],
-        headers={'Authorization': f'Bearer {tokens["access_token"]}'},
+        oauth.vouch.load_server_metadata()["userinfo_endpoint"],
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
         timeout=10,
     )
     if resp.status_code != 200:
-        return f'UserInfo request failed: {resp.status_code}', resp.status_code
+        return f"UserInfo request failed: {resp.status_code}", resp.status_code
 
     formatted = json.dumps(resp.json(), indent=2)
     return render_template_string(USERINFO_TEMPLATE, userinfo=formatted)
 
-@app.route('/logout')
+
+@app.route("/logout")
 def logout():
     """Sign out locally, then at Vouch (OIDC RP-Initiated Logout 1.0).
 
@@ -221,16 +228,19 @@ def logout():
     sign-in would complete silently. Vouch shows a confirmation page and redirects
     back only when id_token_hint verifies and post_logout_redirect_uri is registered.
     """
-    tokens = SESSIONS.pop(session.pop('sid', None), {}).get('tokens', {})
-    end_session = oauth.vouch.load_server_metadata().get('end_session_endpoint')
-    if not end_session or not tokens.get('id_token'):
-        return redirect('/')
-    params = urlencode({
-        'id_token_hint': tokens['id_token'],
-        'post_logout_redirect_uri': urljoin(redirect_uri(), '/'),
-        'client_id': VOUCH_CLIENT_ID,
-    })
-    return redirect(f'{end_session}?{params}')
+    tokens = SESSIONS.pop(session.pop("sid", None), {}).get("tokens", {})
+    end_session = oauth.vouch.load_server_metadata().get("end_session_endpoint")
+    if not end_session or not tokens.get("id_token"):
+        return redirect("/")
+    params = urlencode(
+        {
+            "id_token_hint": tokens["id_token"],
+            "post_logout_redirect_uri": urljoin(redirect_uri(), "/"),
+            "client_id": VOUCH_CLIENT_ID,
+        }
+    )
+    return redirect(f"{end_session}?{params}")
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=3000)
