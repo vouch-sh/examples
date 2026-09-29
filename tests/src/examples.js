@@ -127,7 +127,7 @@ const WEB_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string, rpInitiatedLogout?: boolean }>} */
 const SPA_EXAMPLES = [
   {
     name: "react",
@@ -135,7 +135,8 @@ const SPA_EXAMPLES = [
     type: "spa",
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
-    logoutMethod: "removeUser()",
+    logoutMethod: "signoutRedirect()",
+    rpInitiatedLogout: true,
   },
   {
     name: "vue",
@@ -144,6 +145,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    rpInitiatedLogout: true,
   },
   {
     name: "angular",
@@ -152,6 +154,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "logoff()",
+    rpInitiatedLogout: true,
   },
   {
     name: "sveltekit",
@@ -160,6 +163,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    rpInitiatedLogout: true,
   },
   {
     name: "vanilla-js",
@@ -168,6 +172,7 @@ const SPA_EXAMPLES = [
     loginSelector: "button#login-btn",
     logoutSelector: "button#logout-btn",
     logoutMethod: "signoutRedirect()",
+    rpInitiatedLogout: true,
   },
 ];
 

@@ -22,9 +22,10 @@ export async function login() {
   return await userManager.signinRedirect();
 }
 
+// signoutRedirect, not removeUser: removeUser only clears local storage and leaves
+// the Vouch session intact, so the next sign-in completes silently.
 export async function logout() {
-  await userManager.removeUser();
-  window.location.href = '/';
+  await userManager.signoutRedirect();
 }
 
 export async function handleCallback() {

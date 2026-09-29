@@ -49,8 +49,10 @@ async function checkAuth() {
     const logoutBtn = document.createElement('button');
     logoutBtn.id = 'logout-btn';
     logoutBtn.textContent = 'Sign out';
+    // signoutRedirect, not removeUser: removeUser only clears local storage and leaves
+    // the Vouch session intact, so the next sign-in completes silently.
     logoutBtn.addEventListener('click', () => {
-      userManager.removeUser().then(() => checkAuth());
+      userManager.signoutRedirect();
     });
     el.appendChild(logoutBtn);
   } else {

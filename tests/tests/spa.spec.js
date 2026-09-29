@@ -98,6 +98,16 @@ for (const example of SPA_EXAMPLES) {
     });
 
     test("logout flow", async ({ browser }) => {
+      if (example.rpInitiatedLogout) {
+        // Cannot be exercised unattended. Sign-out goes through Vouch's end_session
+        // endpoint, which stops on a confirmation page and, once confirmed, deletes
+        // the browser session -- the developer's own session cookie this suite
+        // injects, so the rest of the run would fail until they `vouch login` again.
+        // Verify by hand, or against a throwaway Vouch account.
+        test.skip();
+        return;
+      }
+
       const context = await browser.newContext();
       await setupContext(context, cookie);
       const page = await context.newPage();

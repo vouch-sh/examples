@@ -66,8 +66,10 @@ export class AppComponent implements OnInit {
     this.oidc.authorize();
   }
 
+  // logoff, not logoffLocal: logoffLocal only clears local storage and leaves the
+  // Vouch session intact, so the next sign-in completes silently.
   logout() {
-    this.oidc.logoffLocal();
+    this.oidc.logoff().subscribe();
     this.isAuthenticated = false;
     this.email = '';
     this.hardwareVerified = false;
