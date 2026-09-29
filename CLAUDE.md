@@ -35,7 +35,7 @@ docker run -p 3000:3000 \
   vouch-example
 ```
 
-SPA examples omit `VOUCH_CLIENT_SECRET`. Native examples omit both `VOUCH_CLIENT_SECRET` and `VOUCH_REDIRECT_URI`.
+SPA examples omit `VOUCH_CLIENT_SECRET`. Native examples omit both `VOUCH_CLIENT_SECRET` and `VOUCH_REDIRECT_URI`. Server-side examples with a session also need their session secret (see Environment Variables) and refuse to start without it; each example's README lists exactly what it takes.
 
 ## CI
 
@@ -76,7 +76,11 @@ Credentials come from the Vouch CLI's XDG locations — `$XDG_CONFIG_HOME/vouch/
 | `VOUCH_ISSUER` | All | OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | All except the self-registering `native/python-agent-*` and `mcp/credential-broker` | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Web only | OAuth client secret |
-| `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL |
+| `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL. Its origin plus `/` is also the post-logout redirect URI, which must be registered exactly |
+| `SECRET_KEY` | `express-openid`, `flask-authlib`, `fastapi-authlib`, `django-allauth`, `spa/bff-express` | Session secret; required, no default |
+| `NEXTAUTH_SECRET` / `APP_KEY` / `SECRET_KEY_BASE` | `nextjs-nextauth` / `laravel-socialite` / `rails-omniauth` | Framework session secret; required, no default |
+| `VOUCH_AUDIENCE` | MCP + A2A | Public URL of the server; its WHATWG-normalised form (trailing `/`) is the RFC 9728 `resource` and the required `aud` |
+| `AWS_REGION` | `python-agent-aws`, `python-agent-multi`, `mcp/credential-broker` | Region for the regional STS endpoint |
 
 ## Dependency Management
 
@@ -94,5 +98,7 @@ Credentials come from the Vouch CLI's XDG locations — `$XDG_CONFIG_HOME/vouch/
 | Composer | `composer.json` → `composer.lock` | `docker run --rm -v "$PWD":/app -w /app composer:2.9 composer update --no-install` | `composer install --no-dev` |
 | NuGet | `*.csproj` → `packages.lock.json` | `dotnet restore --use-lock-file` | `dotnet restore --locked-mode` |
 | Maven | `pom.xml` (BOM-pinned) | — | `mvn package` |
+
+The regenerate commands keep existing pins and only resolve what changed. To move every dependency to its latest allowed version, add `--upgrade` to the `uv pip compile` command, and run `npm update --package-lock-only` instead of `npm install --package-lock-only`.
 
 `--universal` on the Python compile is required, not optional: development is arm64 macOS and CI builds linux/amd64, so a platform-specific resolution would pin wheels that don't exist on the other architecture.
