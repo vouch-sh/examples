@@ -3,8 +3,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+# Off unless asked for: debug pages expose settings and stack traces.
+DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
+# Comma-separated. The default is what Django itself allows in development.
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '.localhost,127.0.0.1,[::1]').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',

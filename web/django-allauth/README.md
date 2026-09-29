@@ -12,6 +12,8 @@ Set the following environment variables:
 - `VOUCH_CLIENT_ID` -- OAuth 2.0 client ID
 - `VOUCH_CLIENT_SECRET` -- OAuth 2.0 client secret
 - `VOUCH_REDIRECT_URI` -- Redirect URI (default: `http://localhost:3000/accounts/oidc/vouch/login/callback/`)
+- `DEBUG` -- `true` to enable Django's debug mode (default: off)
+- `ALLOWED_HOSTS` -- Comma-separated host names the app serves (default: `.localhost,127.0.0.1,[::1]`)
 
 ## Run with Docker
 
