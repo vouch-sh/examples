@@ -5,8 +5,13 @@ import jwt
 import uvicorn
 from a2a.helpers import new_text_message
 from a2a.server.agent_execution import AgentExecutor
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes import (
+    DefaultServerCallContextBuilder,
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+)
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
@@ -66,10 +71,28 @@ class IdentityAgentExecutor(AgentExecutor):
     """A simple agent that returns the caller's verified identity."""
 
     async def execute(self, context, event_queue):
-        result = {
-            "message": "Identity verified via Vouch OIDC",
-            "note": "The caller was authenticated with a hardware security key",
-        }
+        claims = context.call_context.state["claims"]
+        # Vouch sets hardware_verified only when the user's session was established
+        # with a FIDO2 hardware key, so that is what this agent's claim rests on.
+        if claims.get("hardware_verified") is True:
+            result = {
+                "message": "Identity verified via Vouch OIDC",
+                "note": "The caller was authenticated with a hardware security key",
+                "sub": claims["sub"],
+                "email": claims.get("email"),
+                "client_id": claims.get("client_id"),
+                "hardware_verified": True,
+                "acr": claims.get("acr"),
+                "amr": claims.get("amr", []),
+            }
+        else:
+            result = {
+                "error": "hardware_key_required",
+                "message": (
+                    "This agent requires hardware key verification. "
+                    "The access token has hardware_verified=false."
+                ),
+            }
         # A message rather than an artifact: v1.0 enforces the streaming rules, so
         # emitting an artifact with no preceding Task event is now an error.
         await event_queue.enqueue_event(
@@ -116,6 +139,16 @@ agent_card = AgentCard(
     security_requirements=[SecurityRequirement(schemes={"vouch_oidc": {"list": []}})],
 )
 
+
+class VouchCallContextBuilder(DefaultServerCallContextBuilder):
+    """Hand the claims auth_middleware verified to the agent executor."""
+
+    def build(self, request: Request) -> ServerCallContext:
+        call_context = super().build(request)
+        call_context.state["claims"] = request.state.auth
+        return call_context
+
+
 task_store = InMemoryTaskStore()
 handler = DefaultRequestHandler(
     agent_executor=IdentityAgentExecutor(),
@@ -146,7 +179,10 @@ app = Starlette(
     routes=[
         *create_agent_card_routes(agent_card),
         *create_jsonrpc_routes(
-            handler, rpc_url=DEFAULT_RPC_URL, enable_v0_3_compat=True
+            handler,
+            rpc_url=DEFAULT_RPC_URL,
+            context_builder=VouchCallContextBuilder(),
+            enable_v0_3_compat=True,
         ),
     ],
     middleware=[Middleware(BaseHTTPMiddleware, dispatch=auth_middleware)],
