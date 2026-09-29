@@ -1,7 +1,7 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { OidcSecurityService } from 'angular-auth-oidc-client';
+import type { User } from 'oidc-client-ts';
+import { getUser, userManager } from './auth';
 
 // Display only -- never an authorization decision.
 //
@@ -18,23 +18,34 @@ function decodeUnverifiedForDisplay(token: string): Record<string, unknown> {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet],
+  imports: [RouterOutlet],
   template: `
     <div style="font-family: system-ui; padding: 2rem">
       <h1>Vouch OIDC + Angular SPA</h1>
 
-      <div *ngIf="isAuthenticated; else loginBlock">
-        <p>Signed in as {{ email }}</p>
-        <p *ngIf="hardwareVerified"><strong>Hardware Verified</strong></p>
+      @if (user(); as user) {
+        <p>Signed in as {{ user.profile.email }}</p>
+        @if (atClaims()['hardware_verified']) {
+          <p><strong>Hardware Verified</strong></p>
+        }
         <div style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 4px">
           <h3>Profile Claims</h3>
           <ul style="list-style: none; padding: 0">
-            <li><strong>sub:</strong> {{ sub }}</li>
-            <li><strong>email:</strong> {{ email }}</li>
-            <li *ngIf="emailVerified !== undefined"><strong>email_verified:</strong> {{ emailVerified }}</li>
-            <li><strong>hardware_verified:</strong> {{ hardwareVerified }}</li>
-            <li *ngIf="acr"><strong>acr:</strong> {{ acr }}</li>
-            <li *ngIf="amr.length"><strong>amr:</strong> {{ amr.join(', ') }}</li>
+            <li><strong>sub:</strong> {{ user.profile.sub }}</li>
+            <li><strong>email:</strong> {{ user.profile.email }}</li>
+            @if (user.profile.email_verified !== undefined) {
+              <li><strong>email_verified:</strong> {{ user.profile.email_verified }}</li>
+            }
+            <li><strong>hardware_verified:</strong> {{ atClaims()['hardware_verified'] || false }}</li>
+            @if (atClaims()['acr']) {
+              <li><strong>acr:</strong> {{ atClaims()['acr'] }}</li>
+            }
+            @if (amr().length) {
+              <li><strong>amr:</strong> {{ amr().join(', ') }}</li>
+            }
+            @if (jkt()) {
+              <li><strong>DPoP-bound (cnf.jkt):</strong> {{ jkt() }}</li>
+            }
           </ul>
         </div>
         <div style="margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px">
@@ -44,69 +55,55 @@ function decodeUnverifiedForDisplay(token: string): Record<string, unknown> {
         <div style="margin-top: 1rem">
           <button (click)="logout()">Sign out</button>
         </div>
-      </div>
-
-      <ng-template #loginBlock>
+      } @else {
         <button (click)="login()">Sign in with Vouch</button>
-      </ng-template>
+      }
 
       <router-outlet></router-outlet>
     </div>
   `,
 })
 export class AppComponent implements OnInit, OnDestroy {
-  private oidc = inject(OidcSecurityService);
   private timer?: ReturnType<typeof setInterval>;
+  private now = signal(Math.floor(Date.now() / 1000));
 
-  isAuthenticated = false;
-  sub = '';
-  email = '';
-  emailVerified?: boolean;
-  hardwareVerified = false;
-  acr = '';
-  amr: string[] = [];
-  timeLeft = signal(0);
+  user = signal<User | null>(null);
+  atClaims = computed<Record<string, unknown>>(() => {
+    const token = this.user()?.access_token;
+    return token ? decodeUnverifiedForDisplay(token) : {};
+  });
+  amr = computed(() => (this.atClaims()['amr'] as string[] | undefined) ?? []);
+  jkt = computed(() => (this.atClaims()['cnf'] as { jkt?: string } | undefined)?.jkt);
+  timeLeft = computed(() => Math.max((this.user()?.expires_at ?? 0) - this.now(), 0));
 
-  ngOnInit() {
-    this.oidc.checkAuth().subscribe(({ isAuthenticated, userData, accessToken }) => {
-      this.isAuthenticated = isAuthenticated;
-      if (userData) {
-        this.sub = userData.sub || '';
-        this.email = userData.email || '';
-        this.emailVerified = userData.email_verified;
-      }
-      if (accessToken) {
-        const atClaims = decodeUnverifiedForDisplay(accessToken);
-        this.hardwareVerified = (atClaims['hardware_verified'] as boolean) || false;
-        this.acr = (atClaims['acr'] as string) || '';
-        this.amr = (atClaims['amr'] as string[]) || [];
-        const exp = atClaims['exp'] as number;
-        const tick = () => this.timeLeft.set(Math.max(exp - Math.floor(Date.now() / 1000), 0));
-        tick();
-        this.timer = setInterval(tick, 1000);
-      }
-      // After processing the callback, redirect to home with a full page load
-      // so checkAuth() re-reads stored tokens and updates the UI
-      if (window.location.pathname === '/callback') {
-        window.location.href = '/';
-      }
-    });
+  private onUserLoaded = (user: User) => this.user.set(user);
+  private onExpired = async () => {
+    await userManager.removeUser();
+    this.user.set(null);
+  };
+
+  async ngOnInit() {
+    // The callback route signs in after this component has loaded, so pick the user
+    // up from the event rather than only on startup.
+    userManager.events.addUserLoaded(this.onUserLoaded);
+    userManager.events.addAccessTokenExpired(this.onExpired);
+    this.timer = setInterval(() => this.now.set(Math.floor(Date.now() / 1000)), 1000);
+    this.user.set(await getUser());
   }
 
   ngOnDestroy() {
+    userManager.events.removeUserLoaded(this.onUserLoaded);
+    userManager.events.removeAccessTokenExpired(this.onExpired);
     clearInterval(this.timer);
   }
 
   login() {
-    this.oidc.authorize();
+    userManager.signinRedirect();
   }
 
-  // logoff, not logoffLocal: logoffLocal only clears local storage and leaves the
-  // Vouch session intact, so the next sign-in completes silently.
+  // signoutRedirect, not removeUser: removeUser only clears local storage and leaves
+  // the Vouch session intact, so the next sign-in completes silently.
   logout() {
-    this.oidc.logoff().subscribe();
-    this.isAuthenticated = false;
-    this.email = '';
-    this.hardwareVerified = false;
+    userManager.signoutRedirect();
   }
 }

@@ -160,7 +160,8 @@ const SPA_EXAMPLES = [
     type: "spa",
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
-    logoutMethod: "logoff()",
+    logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "sveltekit",
