@@ -113,7 +113,8 @@ app.MapGet("/", async (HttpContext context) =>
         // The handler validated the ID token at sign-in and SaveTokens kept it in the
         // protected auth cookie. Reading claims from it directly avoids the handler's
         // inbound claim mapping, which renames sub and amr and drops acr.
-        var idToken = new JsonWebToken(await context.GetTokenAsync("id_token"));
+        var idToken = new JsonWebToken(await context.GetTokenAsync("id_token")
+            ?? throw new InvalidOperationException("SaveTokens kept no ID token"));
         var emailVerified = idToken.TryGetPayloadValue<bool>("email_verified", out var ev) && ev;
         var amr = string.Join(", ", idToken.Claims.Where(c => c.Type == "amr").Select(c => c.Value));
         var acr = idToken.TryGetPayloadValue<string>("acr", out var acrValue) ? acrValue : "N/A";
