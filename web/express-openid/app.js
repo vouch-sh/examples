@@ -48,6 +48,13 @@ app.use(session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    // Lax, not Strict: the redirect back from Vouch to the callback is a cross-site
+    // navigation, and Strict withholds the cookie holding the PKCE verifier and state.
+    sameSite: 'lax',
+    secure: new URL(callbackUrl).protocol === 'https:',
+  },
 }));
 
 const JWKS = createRemoteJWKSet(new URL(config.serverMetadata().jwks_uri));
