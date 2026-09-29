@@ -95,6 +95,13 @@ app.get('/auth/callback', async (req, res) => {
 
     const claims = tokens.claims();
     const atClaims = await verifyAccessToken(tokens.access_token);
+
+    // New session ID on sign-in, so a session ID planted before login (session
+    // fixation) never becomes an authenticated one.
+    await new Promise((resolve, reject) =>
+      req.session.regenerate((err) => (err ? reject(err) : resolve())),
+    );
+
     req.session.user = {
       id: claims.sub,
       email: claims.email,
