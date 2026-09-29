@@ -19,10 +19,13 @@ export default async function handler(req, res) {
     return res.json({ url: '/' });
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL || `http://${req.headers.host}`;
+  // Vouch compares post_logout_redirect_uri as an exact string, so derive it from
+  // the registered redirect URI's origin rather than from the request's Host header.
+  const redirectUri =
+    process.env.VOUCH_REDIRECT_URI || 'http://localhost:3000/api/auth/callback/vouch';
   const url = new URL(endSession);
   url.searchParams.set('id_token_hint', token.idToken);
-  url.searchParams.set('post_logout_redirect_uri', new URL('/', baseUrl).href);
+  url.searchParams.set('post_logout_redirect_uri', new URL('/', redirectUri).href);
   url.searchParams.set('client_id', process.env.VOUCH_CLIENT_ID);
   res.json({ url: url.href });
 }

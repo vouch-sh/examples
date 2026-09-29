@@ -134,6 +134,19 @@ class AuthController extends \Illuminate\Routing\Controller
      * sign-in would complete silently. Vouch shows a confirmation page and redirects
      * back only when id_token_hint verifies and post_logout_redirect_uri is registered.
      */
+    /**
+     * The app root on the origin of the registered redirect URI. Vouch compares
+     * post_logout_redirect_uri as an exact string, so it is derived from configuration
+     * rather than from the request's Host header.
+     */
+    private function postLogoutRedirectUri(): string
+    {
+        $redirect = parse_url(config('services.oidc.redirect'));
+        $port = isset($redirect['port']) ? ':' . $redirect['port'] : '';
+
+        return $redirect['scheme'] . '://' . $redirect['host'] . $port . '/';
+    }
+
     public function logout(Request $request)
     {
         $idToken = $request->session()->pull('id_token');
@@ -146,7 +159,7 @@ class AuthController extends \Illuminate\Routing\Controller
 
         return redirect()->away($endSession . '?' . http_build_query([
             'id_token_hint' => $idToken,
-            'post_logout_redirect_uri' => $request->root() . '/',
+            'post_logout_redirect_uri' => $this->postLogoutRedirectUri(),
             'client_id' => config('services.oidc.client_id'),
         ]));
     }

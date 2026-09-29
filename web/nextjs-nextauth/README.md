@@ -11,7 +11,7 @@
 | `VOUCH_ISSUER` | Vouch OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | OAuth client secret |
-| `VOUCH_REDIRECT_URI` | OAuth redirect URI |
+| `VOUCH_REDIRECT_URI` | OAuth redirect URI (default: `http://localhost:3000/api/auth/callback/vouch`). Its origin sets the post-logout redirect URI. |
 | `NEXTAUTH_URL` | The canonical URL of your site (e.g. `http://localhost:3000`). Required by NextAuth.js in production. |
 | `NEXTAUTH_SECRET` | A random string used to encrypt tokens. Generate one with `openssl rand -base64 32`. |
 
@@ -55,9 +55,9 @@ The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from 
 
 ## Sign-out
 
-Clearing only the local session would leave the user signed in at Vouch, so the next sign-in would complete silently. Sign-out therefore also ends the Vouch session with [OIDC RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html). NextAuth v4 has no RP-initiated logout. The `jwt` callback keeps the ID token in the encrypted session cookie (it is not copied into the client-visible session); the Sign out button calls `/api/logout` for the end-session URL, runs `signOut({ redirect: false })`, then navigates there. The post-logout URI is derived from `NEXTAUTH_URL`.
+Clearing only the local session would leave the user signed in at Vouch, so the next sign-in would complete silently. Sign-out therefore also ends the Vouch session with [OIDC RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html). NextAuth v4 has no RP-initiated logout. The `jwt` callback keeps the ID token in the encrypted session cookie (it is not copied into the client-visible session); the Sign out button calls `/api/logout` for the end-session URL, runs `signOut({ redirect: false })`, then navigates there.
 
-Vouch shows a confirmation page and only redirects back when `id_token_hint` verifies **and** `post_logout_redirect_uri` exactly matches a URI registered on the client. Register this post-logout redirect URI (exact, including the trailing slash):
+Vouch shows a confirmation page and only redirects back when `id_token_hint` verifies **and** `post_logout_redirect_uri` exactly matches a URI registered on the client. The post-logout redirect URI the app sends is the origin of `VOUCH_REDIRECT_URI` followed by `/`. Register it exactly, including the trailing slash:
 
 ```
 http://localhost:3000/

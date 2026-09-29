@@ -76,9 +76,18 @@ class SessionsController < ApplicationController
 
     query = URI.encode_www_form(
       id_token_hint: id_token,
-      post_logout_redirect_uri: root_url,
+      post_logout_redirect_uri: post_logout_redirect_uri,
       client_id: AccessTokenVerifier::CLIENT_ID
     )
     redirect_to "#{end_session}?#{query}", allow_other_host: true
+  end
+
+  private
+
+  # The app root on the origin of the registered redirect URI. Vouch compares
+  # post_logout_redirect_uri as an exact string, so it is derived from configuration
+  # rather than from the request's Host header.
+  def post_logout_redirect_uri
+    URI.join(ENV['VOUCH_REDIRECT_URI'] || 'http://localhost:3000/auth/vouch/callback', '/').to_s
   end
 end

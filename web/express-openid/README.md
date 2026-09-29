@@ -61,7 +61,7 @@ The app redirects to `/oauth/logout` with `id_token_hint` and
 `post_logout_redirect_uri`. Vouch shows a confirmation page and only redirects back
 when the hint verifies **and** the URI is registered on the client — otherwise it
 finishes on its own signed-out page rather than following an unvalidated URI.
-Register this post-logout redirect URI (exact, including the trailing slash):
+The post-logout redirect URI the app sends is the origin of `VOUCH_REDIRECT_URI` followed by `/`. Register it exactly, including the trailing slash:
 
 ```
 http://localhost:3000/

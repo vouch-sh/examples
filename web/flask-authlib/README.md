@@ -45,7 +45,7 @@ The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from 
 
 Clearing only the local session would leave the user signed in at Vouch, so the next sign-in would complete silently. Sign-out therefore also ends the Vouch session with [OIDC RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html). `/logout` clears the session and redirects to `server_metadata['end_session_endpoint']` with the stored ID token as `id_token_hint`.
 
-Vouch shows a confirmation page and only redirects back when `id_token_hint` verifies **and** `post_logout_redirect_uri` exactly matches a URI registered on the client. Register this post-logout redirect URI (exact, including the trailing slash):
+Vouch shows a confirmation page and only redirects back when `id_token_hint` verifies **and** `post_logout_redirect_uri` exactly matches a URI registered on the client. The post-logout redirect URI the app sends is the origin of `VOUCH_REDIRECT_URI` followed by `/`. Register it exactly, including the trailing slash:
 
 ```
 http://localhost:3000/

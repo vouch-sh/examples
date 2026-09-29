@@ -1,5 +1,6 @@
 package sh.vouch.examples;
 
+import java.net.URI;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -29,7 +30,12 @@ public class SecurityConfig {
         // exactly matches one registered on the client.
         OidcClientInitiatedLogoutSuccessHandler logoutSuccessHandler =
             new OidcClientInitiatedLogoutSuccessHandler(clientRegistrationRepository);
-        logoutSuccessHandler.setPostLogoutRedirectUri("{baseUrl}/");
+        // Vouch compares post_logout_redirect_uri as an exact string, so derive it from
+        // the registered redirect URI's origin rather than from the request's Host header.
+        String redirectUri =
+            clientRegistrationRepository.findByRegistrationId("vouch").getRedirectUri();
+        logoutSuccessHandler.setPostLogoutRedirectUri(
+            URI.create(redirectUri).resolve("/").toString());
 
         http
             .authorizeHttpRequests(auth -> auth

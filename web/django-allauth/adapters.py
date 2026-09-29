@@ -1,5 +1,5 @@
 import os
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import jwt
 from allauth.account.adapter import DefaultAccountAdapter
@@ -10,6 +10,9 @@ from jwt import PyJWKClient
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID', '')
+VOUCH_REDIRECT_URI = os.environ.get(
+    'VOUCH_REDIRECT_URI', 'http://localhost:3000/accounts/oidc/vouch/login/callback/'
+)
 
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
@@ -54,6 +57,16 @@ class VouchOIDCAdapter(OpenIDConnectOAuth2Adapter):
         return sociallogin
 
 
+def post_logout_redirect_uri():
+    """The app root on the origin of the registered redirect URI.
+
+    Vouch compares post_logout_redirect_uri as an exact string, so it is derived from
+    configuration rather than from the request's Host header.
+    """
+    redirect = urlsplit(VOUCH_REDIRECT_URI)
+    return f'{redirect.scheme}://{redirect.netloc}/'
+
+
 class VouchAccountAdapter(DefaultAccountAdapter):
     def get_logout_redirect_url(self, request):
         """Send the user to Vouch's end_session endpoint after the local logout.
@@ -70,7 +83,7 @@ class VouchAccountAdapter(DefaultAccountAdapter):
             return super().get_logout_redirect_url(request)
         params = urlencode({
             'id_token_hint': id_token,
-            'post_logout_redirect_uri': request.build_absolute_uri('/'),
+            'post_logout_redirect_uri': post_logout_redirect_uri(),
             'client_id': VOUCH_CLIENT_ID,
         })
         return f'{end_session}?{params}'
