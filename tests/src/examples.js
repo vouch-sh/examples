@@ -17,6 +17,7 @@ const WEB_EXAMPLES = [
     // Signs out at Vouch too, so logout goes via the end_session endpoint and
     // stops on Vouch's confirmation page before returning here.
     rpInitiatedLogout: true,
+    dpopBound: true,
   },
   {
     name: "nextjs-nextauth",
@@ -25,7 +26,8 @@ const WEB_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     callbackPath: "/api/auth/callback/vouch",
-    logoutMethod: "signOut()",
+    logoutMethod: "fetch(/api/logout) + signOut({ redirect: false })",
+    rpInitiatedLogout: true,
     // NextAuth constructs callback URL from NEXTAUTH_URL, not VOUCH_REDIRECT_URI
     extraEnv: (baseUrl) => ({
       NEXTAUTH_URL: baseUrl,
@@ -40,6 +42,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action*="logout"] button',
     callbackPath: "/accounts/oidc/vouch/login/callback/",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
     // django-allauth shows a "Sign In Via Vouch" confirmation page before redirecting
     preAuthorizeSelector: 'button:has-text("Continue")',
   },
@@ -51,6 +54,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "flask-authlib",
@@ -60,6 +64,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "laravel-socialite",
@@ -69,6 +74,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action="/logout"] button',
     callbackPath: "/auth/callback",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
   },
   {
     name: "rails-omniauth",
@@ -78,6 +84,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form button:has-text("Sign out")',
     callbackPath: "/auth/vouch/callback",
     logoutMethod: "DELETE",
+    rpInitiatedLogout: true,
   },
   {
     name: "spring-boot",
@@ -87,6 +94,8 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action*="logout"] button',
     callbackPath: "/login/oauth2/code/vouch",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
+    dpopBound: true,
   },
   {
     name: "go-oidc",
@@ -96,6 +105,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "axum-openidconnect",
@@ -105,6 +115,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "aspnet-core",
@@ -114,6 +125,8 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action="/logout"] button',
     callbackPath: "/callback",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
+    dpopBound: true,
   },
   {
     name: "bff-express",

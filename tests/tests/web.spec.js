@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const { test, expect } = require("@playwright/test");
 const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
@@ -45,6 +46,12 @@ for (const example of WEB_EXAMPLES) {
         VOUCH_CLIENT_ID: app.client_id,
         VOUCH_CLIENT_SECRET: app.client_secret,
         VOUCH_REDIRECT_URI: callbackUrl,
+        // Session secrets have no built-in default; the examples refuse to run
+        // without one. SECRET_KEY: Express, Flask, FastAPI, Django. APP_KEY: Laravel.
+        // SECRET_KEY_BASE: Rails.
+        SECRET_KEY: crypto.randomBytes(32).toString("hex"),
+        SECRET_KEY_BASE: crypto.randomBytes(64).toString("hex"),
+        APP_KEY: `base64:${crypto.randomBytes(32).toString("base64")}`,
         ...(example.extraEnv ? example.extraEnv(baseUrl) : {}),
       };
       run({ name: containerName, image: imageName, port, env });
@@ -231,7 +238,6 @@ for (const example of WEB_EXAMPLES) {
 
       await logoutElement.click();
       await page.waitForLoadState("networkidle", { timeout: 10_000 });
-
 
       // Verify returned to unauthenticated state
       const loginAgain = page.locator(example.loginSelector).first();

@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -33,10 +34,16 @@ public class AccessTokenConfig {
     @Bean
     public JwtDecoder accessTokenDecoder(
             @Value("${spring.security.oauth2.client.provider.vouch.issuer-uri}") String issuer,
-            @Value("${spring.security.oauth2.client.registration.vouch.client-id}") String clientId) {
+            @Value("${spring.security.oauth2.client.registration.vouch.client-id}") String clientId,
+            ClientRegistrationRepository clientRegistrationRepository) {
+
+        // The JWKS location comes from the discovery document Spring already fetched
+        // for the issuer-uri, rather than being assumed from the issuer's URL layout.
+        String jwkSetUri = clientRegistrationRepository.findByRegistrationId("vouch")
+                .getProviderDetails().getJwkSetUri();
 
         NimbusJwtDecoder decoder = NimbusJwtDecoder
-                .withJwkSetUri(issuer + "/oauth/jwks")
+                .withJwkSetUri(jwkSetUri)
                 // withJwkSetUri defaults to RS256 only. Vouch signs access tokens with
                 // ES256, which would otherwise fail as "no matching key(s) found".
                 .jwsAlgorithms(algorithms -> {

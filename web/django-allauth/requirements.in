@@ -1,2 +1,5 @@
 django>=6.0,<7
 django-allauth[socialaccount]>=65.18
+PyJWT[crypto]>=2.13
+uvicorn>=0.54
+servestatic>=4.3.4
