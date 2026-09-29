@@ -145,7 +145,7 @@ async function deviceFlow() {
       // Step 5: Demonstrate post-auth API call with the access token
       console.log('\n--- Post-auth API call ---');
       const userInfo2 = await fetchUserInfo(tokens.access_token);
-      console.log(`Second userinfo call succeeded: ${userInfo2.email}`);
+      console.log(`Second userinfo call succeeded: ${userInfo2.email || 'N/A'}`);
 
       return;
     }

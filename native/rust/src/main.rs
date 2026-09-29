@@ -78,12 +78,29 @@ async fn verify_access_token(
     Ok(decode::<AccessTokenClaims>(token, &DecodingKey::from_jwk(jwk)?, &validation)?.claims)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn fetch_userinfo(
+    client: &Client,
+    issuer: &str,
+    access_token: &str,
+) -> Result<UserInfoResponse, Box<dyn std::error::Error>> {
+    let response = client
+        .get(format!("{issuer}/oauth/userinfo"))
+        .bearer_auth(access_token)
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(format!("UserInfo request failed: {}", response.status().as_u16()).into());
+    }
+    Ok(response.json().await?)
+}
+
+async fn device_flow() -> Result<(), Box<dyn std::error::Error>> {
     let issuer =
         std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string());
-    let client_id =
-        std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID environment variable is required");
+    let client_id = std::env::var("VOUCH_CLIENT_ID")
+        .ok()
+        .filter(|id| !id.is_empty())
+        .ok_or("VOUCH_CLIENT_ID environment variable is required")?;
 
     // reqwest has no default timeout, so an unresponsive issuer would hang the CLI forever.
     let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
@@ -98,8 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .send()
         .await?;
     if !response.status().is_success() {
-        eprintln!("Device request failed: {}", response.status().as_u16());
-        std::process::exit(1);
+        return Err(format!("Device request failed: {}", response.status().as_u16()).into());
     }
     let device_response: DeviceResponse = response.json().await?;
 
@@ -137,22 +153,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &tokens.access_token[..20.min(tokens.access_token.len())]
             );
 
-            // Fetch user info
-            let userinfo_response = client
-                .get(format!("{issuer}/oauth/userinfo"))
-                .bearer_auth(&tokens.access_token)
-                .send()
-                .await?;
-
-            if userinfo_response.status().is_success() {
-                let userinfo: UserInfoResponse = userinfo_response.json().await?;
-                println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
-            } else {
-                println!("Email: N/A");
-            }
-
+            // Step 4: Fetch user info and verify the access token's hardware claims
+            let userinfo = fetch_userinfo(&client, &issuer, &tokens.access_token).await?;
             let at_claims =
                 verify_access_token(&client, &issuer, &client_id, &tokens.access_token).await?;
+            println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
             println!("Hardware verified: {}", at_claims.hardware_verified);
             println!("acr: {}", at_claims.acr.as_deref().unwrap_or("N/A"));
             println!(
@@ -163,6 +168,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     at_claims.amr.join(", ")
                 }
             );
+
+            // Step 5: Demonstrate post-auth API call with the access token
+            println!("\n--- Post-auth API call ---");
+            let userinfo2 = fetch_userinfo(&client, &issuer, &tokens.access_token).await?;
+            println!(
+                "Second userinfo call succeeded: {}",
+                userinfo2.email.as_deref().unwrap_or("N/A")
+            );
+
             return Ok(());
         }
 
@@ -170,27 +184,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // body, so a failed response is not guaranteed to be JSON.
         let status = response.status();
         let Ok(error) = serde_json::from_str::<ErrorResponse>(&response.text().await?) else {
-            eprintln!("Token request failed: {}", status.as_u16());
-            std::process::exit(1);
+            return Err(format!("Token request failed: {}", status.as_u16()).into());
         };
         match error.error.as_str() {
-            "authorization_pending" => continue,
-            "slow_down" => {
-                interval += Duration::from_secs(5);
-                continue;
-            }
-            "expired_token" => {
-                eprintln!("Device code expired. Please try again.");
-                std::process::exit(1);
-            }
-            "access_denied" => {
-                eprintln!("Access denied by user.");
-                std::process::exit(1);
-            }
-            e => {
-                eprintln!("Unexpected error: {e}");
-                std::process::exit(1);
-            }
+            "authorization_pending" => {}
+            "slow_down" => interval += Duration::from_secs(5),
+            "expired_token" => return Err("Device code expired. Please try again.".into()),
+            "access_denied" => return Err("Access denied by user.".into()),
+            e => return Err(format!("Unexpected error: {e}").into()),
         }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    if let Err(err) = device_flow().await {
+        eprintln!("Error: {err}");
+        std::process::exit(1);
     }
 }
