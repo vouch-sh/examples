@@ -5,8 +5,14 @@
   <h1>Vouch OIDC + Spring Boot</h1>
   <p>Signed in as <span th:text="${email}"></span></p>
   <p th:if="${hardwareVerified}"><strong>Hardware Verified</strong></p>
-  <p th:if="${acr}">acr: <span th:text="${acr}"></span></p>
-  <p th:if="${amr}">amr: <span th:text="${#strings.listJoin(amr, ', ')}"></span></p>
+  <ul>
+    <li>email: <span th:text="${email}"></span></li>
+    <li>email_verified: <span th:text="${emailVerified}"></span></li>
+    <li>sub: <span th:text="${sub}"></span></li>
+    <li>amr: <span th:text="${amr != null ? #strings.listJoin(amr, ', ') : 'N/A'}"></span></li>
+    <li>acr: <span th:text="${acr ?: 'N/A'}"></span></li>
+    <li>hardware_verified: <span th:text="${hardwareVerified}"></span></li>
+  </ul>
   <form th:action="@{/logout}" method="post">
     <button type="submit">Sign out</button>
   </form>
