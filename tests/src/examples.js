@@ -4,7 +4,7 @@
  * app type, login/logout selectors, and callback path.
  */
 
-/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean, dpopBound?: boolean, userinfoSelector?: string, userinfoOutput?: string }>} */
 const WEB_EXAMPLES = [
   {
     name: "express-openid",
@@ -120,14 +120,18 @@ const WEB_EXAMPLES = [
     dir: "spa/bff-express",
     type: "web",
     loginSelector: 'a[href="/auth/login"]',
-    logoutSelector: 'a[href="/auth/logout"]',
+    logoutSelector: 'form[action="/auth/logout"] button',
     callbackPath: "/auth/callback",
-    logoutMethod: "GET",
+    logoutMethod: "POST",
     rpInitiatedLogout: true,
+    dpopBound: true,
+    // UserInfo is fetched over DPoP, so exercising it proves the proof is accepted
+    userinfoSelector: 'button:has-text("Fetch UserInfo")',
+    userinfoOutput: "#userinfo-output",
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string, dpopBound?: boolean }>} */
 const SPA_EXAMPLES = [
   {
     name: "react",
@@ -135,7 +139,8 @@ const SPA_EXAMPLES = [
     type: "spa",
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
-    logoutMethod: "removeUser()",
+    logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "vue",
@@ -144,6 +149,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "angular",
@@ -151,7 +157,8 @@ const SPA_EXAMPLES = [
     type: "spa",
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
-    logoutMethod: "logoff()",
+    logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "sveltekit",
@@ -160,6 +167,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "vanilla-js",
@@ -168,6 +176,7 @@ const SPA_EXAMPLES = [
     loginSelector: "button#login-btn",
     logoutSelector: "button#logout-btn",
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
 ];
 

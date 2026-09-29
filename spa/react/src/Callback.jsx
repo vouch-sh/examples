@@ -14,7 +14,11 @@ export default function Callback() {
 
   return (
     <div style={{ fontFamily: 'system-ui', padding: '2rem' }}>
-      <p>Processing login...</p>
+      {auth.error ? (
+        <p>Login failed: {auth.error.message}. <a href="/">Try again</a></p>
+      ) : (
+        <p>Processing login...</p>
+      )}
     </div>
   );
 }

@@ -36,6 +36,23 @@
           app.appendChild(hw);
         }
 
+        if (data.user.acr || data.user.amr.length || data.user.dpopJkt) {
+          const ul = document.createElement('ul');
+          for (const [name, value] of [
+            ['acr', data.user.acr],
+            ['amr', data.user.amr.join(', ')],
+            ['DPoP-bound (cnf.jkt)', data.user.dpopJkt],
+          ]) {
+            if (!value) continue;
+            const li = document.createElement('li');
+            const label = document.createElement('strong');
+            label.textContent = name + ':';
+            li.append(label, ' ' + value);
+            ul.appendChild(li);
+          }
+          app.appendChild(ul);
+        }
+
         const userinfoBtn = document.createElement('button');
         userinfoBtn.textContent = 'Fetch UserInfo';
         userinfoBtn.addEventListener('click', fetchUserInfo);
@@ -43,11 +60,14 @@
 
         app.appendChild(document.createTextNode(' '));
 
-        const logoutLink = document.createElement('a');
-        logoutLink.href = '/auth/logout';
-        logoutLink.textContent = 'Sign out';
-        logoutLink.className = 'btn';
-        app.appendChild(logoutLink);
+        const logoutForm = document.createElement('form');
+        logoutForm.method = 'post';
+        logoutForm.action = '/auth/logout';
+        logoutForm.style.display = 'inline';
+        const logoutBtn = document.createElement('button');
+        logoutBtn.textContent = 'Sign out';
+        logoutForm.appendChild(logoutBtn);
+        app.appendChild(logoutForm);
       } else {
         const loginLink = document.createElement('a');
         loginLink.href = '/auth/login';

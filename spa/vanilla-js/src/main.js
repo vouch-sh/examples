@@ -1,4 +1,4 @@
-import { UserManager } from 'oidc-client-ts';
+import { IndexedDbDPoPStore, UserManager } from 'oidc-client-ts';
 
 // Display only -- never an authorization decision.
 //
@@ -18,13 +18,27 @@ const config = {
   redirect_uri: '__VOUCH_REDIRECT_URI__',
   post_logout_redirect_uri: window.location.origin,
   scope: 'openid email',
+  // Vouch never issues refresh tokens, so silent renew can only fail; sign in again on expiry.
+  automaticSilentRenew: false,
+  // DPoP (RFC 9449): tokens are bound to a non-extractable key held in IndexedDB, so a
+  // leaked access token is useless without it. bind_authorization_code also binds the
+  // code (dpop_jkt), so an intercepted code cannot be redeemed with another key.
+  dpop: { store: new IndexedDbDPoPStore(), bind_authorization_code: true },
 };
 
 const userManager = new UserManager(config);
 
+userManager.events.addAccessTokenExpired(() => {
+  userManager.removeUser().then(() => checkAuth());
+});
+
+let countdown;
+
 async function checkAuth() {
-  const user = await userManager.getUser();
+  const stored = await userManager.getUser();
+  const user = stored && !stored.expired ? stored : null;
   const el = document.getElementById('user-info');
+  clearInterval(countdown);
 
   if (user) {
     el.textContent = '';
@@ -39,11 +53,53 @@ async function checkAuth() {
       hw.appendChild(strong);
       el.appendChild(hw);
     }
+
+    const claims = [
+      ['sub', user.profile.sub],
+      ['email', user.profile.email],
+      ['email_verified', user.profile.email_verified],
+      ['hardware_verified', atClaims.hardware_verified || false],
+      ['acr', atClaims.acr],
+      ['amr', atClaims.amr?.join(', ')],
+      ['DPoP-bound (cnf.jkt)', atClaims.cnf?.jkt],
+    ];
+    const profileBox = document.createElement('div');
+    profileBox.style.cssText = 'margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 4px';
+    const profileHeading = document.createElement('h3');
+    profileHeading.textContent = 'Profile Claims';
+    const list = document.createElement('ul');
+    list.style.cssText = 'list-style: none; padding: 0';
+    for (const [name, value] of claims) {
+      if (value === undefined) continue;
+      const li = document.createElement('li');
+      const label = document.createElement('strong');
+      label.textContent = `${name}:`;
+      li.append(label, ` ${String(value)}`);
+      list.appendChild(li);
+    }
+    profileBox.append(profileHeading, list);
+    el.appendChild(profileBox);
+
+    const tokenBox = document.createElement('div');
+    tokenBox.style.cssText = 'margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px';
+    const tokenHeading = document.createElement('h3');
+    tokenHeading.textContent = 'Token Info';
+    const expiry = document.createElement('p');
+    const timeLeft = document.createElement('strong');
+    expiry.append('Token expires in: ', timeLeft);
+    const tick = () => { timeLeft.textContent = `${Math.max(user.expires_in ?? 0, 0)}s`; };
+    tick();
+    countdown = setInterval(tick, 1000);
+    tokenBox.append(tokenHeading, expiry);
+    el.appendChild(tokenBox);
+
     const logoutBtn = document.createElement('button');
     logoutBtn.id = 'logout-btn';
     logoutBtn.textContent = 'Sign out';
+    // signoutRedirect, not removeUser: removeUser only clears local storage and leaves
+    // the Vouch session intact, so the next sign-in completes silently.
     logoutBtn.addEventListener('click', () => {
-      userManager.removeUser().then(() => checkAuth());
+      userManager.signoutRedirect();
     });
     el.appendChild(logoutBtn);
   } else {

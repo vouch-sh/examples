@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
-const { setupContext, handleAuthorize } = require("../src/oidc-flow");
+const { setupContext, handleAuthorize, expectRpInitiatedLogout } = require("../src/oidc-flow");
 const { WEB_EXAMPLES } = require("../src/examples");
 const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
@@ -101,6 +101,18 @@ for (const example of WEB_EXAMPLES) {
         timeout: 10_000,
       });
 
+      // The access token carries cnf.jkt only when the DPoP proof was accepted.
+      if (example.dpopBound) {
+        await expect(page.locator("body")).toContainText("DPoP-bound (cnf.jkt)");
+      }
+
+      if (example.userinfoSelector) {
+        await page.locator(example.userinfoSelector).first().click();
+        await expect(page.locator(example.userinfoOutput)).toContainText('"email"', {
+          timeout: 5_000,
+        });
+      }
+
       await context.close();
     });
 
@@ -170,21 +182,6 @@ for (const example of WEB_EXAMPLES) {
     });
 
     test("logout flow", async ({ browser }) => {
-      if (example.rpInitiatedLogout) {
-        // Cannot be exercised unattended. These examples revoke their access token
-        // on sign-out (RFC 7009), and Vouch revokes by user rather than by token --
-        // `delete_sessions_for_user` in services/oidc/introspection.rs. This suite
-        // injects the developer's own Vouch session cookie, so clicking sign-out
-        // would delete that session along with every other one they hold: the rest
-        // of the run fails with "Session not found or revoked" and they have to run
-        // `vouch login` again.
-        //
-        // The examples are correct and deliberately not watered down for the
-        // harness. Verify them by hand, or against a throwaway Vouch account.
-        test.skip();
-        return;
-      }
-
       const context = await browser.newContext();
       await setupContext(context, cookie);
       const page = await context.newPage();
@@ -213,6 +210,25 @@ for (const example of WEB_EXAMPLES) {
       // Now, log out
       const logoutElement = page.locator(example.logoutSelector).first();
       await expect(logoutElement).toBeVisible({ timeout: 5_000 });
+
+      if (example.rpInitiatedLogout) {
+        await expectRpInitiatedLogout(page, {
+          triggerAction: () => logoutElement.click(),
+          clientId: app.client_id,
+          postLogoutRedirectUri: `${baseUrl}/`,
+        });
+
+        // The app destroyed its own session before handing off to Vouch.
+        await page.goto(baseUrl);
+        await expect(page.locator(example.loginSelector).first()).toBeVisible({
+          timeout: 5_000,
+        });
+        await expect(page.locator("body")).not.toContainText("Signed in as");
+
+        await context.close();
+        return;
+      }
+
       await logoutElement.click();
       await page.waitForLoadState("networkidle", { timeout: 10_000 });
 

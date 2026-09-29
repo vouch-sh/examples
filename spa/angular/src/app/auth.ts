@@ -1,6 +1,6 @@
-import { IndexedDbDPoPStore, UserManager, WebStorageStateStore } from 'oidc-client-ts';
+import { IndexedDbDPoPStore, User, UserManager, WebStorageStateStore } from 'oidc-client-ts';
 
-const config = {
+export const userManager = new UserManager({
   authority: '__VOUCH_ISSUER__',
   client_id: '__VOUCH_CLIENT_ID__',
   redirect_uri: '__VOUCH_REDIRECT_URI__',
@@ -13,25 +13,9 @@ const config = {
   // code (dpop_jkt), so an intercepted code cannot be redeemed with another key.
   dpop: { store: new IndexedDbDPoPStore(), bind_authorization_code: true },
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
-};
+});
 
-export const userManager = new UserManager(config);
-
-export async function getUser() {
+export async function getUser(): Promise<User | null> {
   const user = await userManager.getUser();
   return user && !user.expired ? user : null;
-}
-
-export async function login() {
-  return await userManager.signinRedirect();
-}
-
-// signoutRedirect, not removeUser: removeUser only clears local storage and leaves
-// the Vouch session intact, so the next sign-in completes silently.
-export async function logout() {
-  await userManager.signoutRedirect();
-}
-
-export async function handleCallback() {
-  return await userManager.signinRedirectCallback();
 }
