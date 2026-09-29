@@ -29,10 +29,11 @@ PORT = int(os.environ.get("PORT", "3000"))
 
 # Our RFC 9728 resource identifier. Clients pass this as the RFC 8707 `resource`
 # parameter when they authorize, and Vouch copies it verbatim into the access token's
-# `aud`. The metadata document and the audience check therefore use this exact
-# string: a URL library that "normalises" it (adding a trailing slash, say) publishes
-# a value no token will ever carry.
-RESOURCE = os.environ.get("VOUCH_AUDIENCE", f"http://localhost:{PORT}")
+# `aud`, so the metadata document and the audience check must use one exact string.
+# That string is the WHATWG-normalised URL (`http://localhost:3000/`, trailing slash
+# included) -- what browser and Node clients get from `new URL(...).href`, and what
+# the TypeScript example publishes.
+RESOURCE = str(AnyHttpUrl(os.environ.get("VOUCH_AUDIENCE", f"http://localhost:{PORT}")))
 METADATA_URL = str(build_resource_metadata_url(AnyHttpUrl(RESOURCE)))
 MCP_PATH = "/mcp"
 
@@ -178,7 +179,15 @@ def authenticate(request: Request) -> tuple[str, dict] | None:
     except jwt.PyJWTError as exc:
         raise AuthError(scheme, "invalid_token", "access token is invalid") from exc
 
-    jkt = (claims.get("cnf") or {}).get("jkt")
+    cnf = claims.get("cnf") or {}
+    # RFC 8705 §3: a certificate-bound token is only usable over mutual TLS with that
+    # certificate. This server never sees a client certificate, so it cannot verify
+    # the binding and must not treat the token as a bearer credential.
+    if "x5t#S256" in cnf:
+        raise AuthError(
+            scheme, "invalid_token", "certificate-bound tokens are not accepted"
+        )
+    jkt = cnf.get("jkt")
     if scheme == "bearer":
         # RFC 9449 §7.2: a DPoP-bound token sent as Bearer is being used without
         # proof of possession, which is exactly what binding exists to prevent.

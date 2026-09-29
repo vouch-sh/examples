@@ -72,6 +72,10 @@ for (const example of MCP_EXAMPLES) {
     const appName = `${APP_PREFIX}${example.name}`;
     let port;
     let baseUrl;
+    // The canonical RFC 9728 resource identifier: the WHATWG-normalised URL, trailing
+    // slash included. Vouch copies `resource` into `aud` verbatim, so tokens must be
+    // requested with exactly the value the server publishes and checks.
+    let resource;
     let callbackUrl;
     let mcpApp;
     // Separate web app for obtaining an access token
@@ -81,6 +85,7 @@ for (const example of MCP_EXAMPLES) {
     test.beforeAll(async () => {
       port = await getRandomPort();
       baseUrl = `http://localhost:${port}`;
+      resource = new URL(baseUrl).href;
       callbackUrl = `${baseUrl}/callback`;
 
       // Create the MCP server's Vouch app
@@ -132,9 +137,9 @@ for (const example of MCP_EXAMPLES) {
       // Exact string comparisons, no slash normalisation. Clients match
       // authorization_servers against the issuer's `iss` (RFC 8414 §3.3) and send
       // `resource` back as the RFC 8707 parameter, which Vouch copies verbatim into
-      // `aud`; a URL library that appends "/" breaks both while looking equivalent.
+      // `aud`, so "equivalent" URLs that differ by a trailing slash do not match.
       expect(metadata.authorization_servers).toEqual([VOUCH_ISSUER_URL]);
-      expect(metadata.resource).toBe(baseUrl);
+      expect(metadata.resource).toBe(resource);
       expect(metadata.scopes_supported).toEqual(["openid", "email"]);
     });
 
@@ -221,7 +226,7 @@ for (const example of MCP_EXAMPLES) {
         clientId: tokenApp.client_id,
         clientSecret: tokenApp.client_secret,
         redirectUri: callbackUrl,
-        resource: baseUrl,
+        resource,
       });
 
       await context.close();
@@ -272,7 +277,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource,
         });
 
         await context.close();
@@ -364,7 +369,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource,
         });
 
         await context.close();
@@ -464,7 +469,7 @@ for (const example of MCP_EXAMPLES) {
             clientId: dpopApp.client_id,
             clientSecret: dpopApp.client_secret,
             redirectUri: callbackUrl,
-            resource: baseUrl,
+            resource,
             dpopKey: privateKey,
           });
           const payload = JSON.parse(Buffer.from(bound.split(".")[1], "base64url"));
