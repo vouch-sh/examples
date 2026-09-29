@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html"
 	"log"
@@ -274,6 +275,23 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 // rather than decoding the payload -- an unverified decode trusts whatever bytes you
 // were handed.
 func verifyAccessToken(ctx context.Context, token string) (map[string]interface{}, error) {
+	// RFC 9068 access tokens carry typ: at+jwt. go-oidc's verifier does not look at
+	// typ, so check it here; requiring it rejects id_tokens, which are not bearer
+	// credentials.
+	headerJSON, err := base64.RawURLEncoding.DecodeString(strings.SplitN(token, ".", 2)[0])
+	if err != nil {
+		return nil, err
+	}
+	var header struct {
+		Typ string `json:"typ"`
+	}
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(header.Typ, "at+jwt") {
+		return nil, fmt.Errorf("unexpected token typ %q", header.Typ)
+	}
+
 	verified, err := atVerifier.Verify(ctx, token)
 	if err != nil {
 		return nil, err
