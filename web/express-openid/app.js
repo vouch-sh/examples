@@ -1,7 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import * as client from 'openid-client';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { calculateJwkThumbprint, createRemoteJWKSet, jwtVerify } from 'jose';
 
 const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const clientId = process.env.VOUCH_CLIENT_ID;
@@ -10,12 +10,30 @@ const callbackUrl = process.env.VOUCH_REDIRECT_URI || 'http://localhost:3000/aut
 
 const config = await client.discovery(new URL(issuer), clientId, clientSecret);
 
-// DPoP (RFC 9449) binds the access token to a key this server holds, so a leaked
-// token is useless without the private key. The key pair lives for the process: the
-// confidential client, not the browser, is what holds the token. openid-client signs
-// a proof per request and retries once when Vouch answers use_dpop_nonce, which
-// Vouch's token endpoint always does on the first attempt.
-const dpop = client.getDPoPHandle(config, await client.randomDPoPKeyPair('ES256'));
+// DPoP (RFC 9449): the authorization code and the access token are bound to a key pair
+// this server holds, so neither is usable on its own if intercepted or leaked. Each
+// sign-in gets its own pair, created at /auth/vouch and kept as JWKs in the server-side
+// session -- the default session store serializes to JSON, which a CryptoKey does not
+// survive. openid-client signs a proof per request and retries once when Vouch answers
+// use_dpop_nonce, which Vouch's token endpoint always does on the first attempt.
+async function newDPoPKeys() {
+  const { publicKey, privateKey } = await client.randomDPoPKeyPair('ES256', {
+    extractable: true,
+  });
+  return {
+    publicJwk: await crypto.subtle.exportKey('jwk', publicKey),
+    privateJwk: await crypto.subtle.exportKey('jwk', privateKey),
+  };
+}
+
+async function dpopHandle({ publicJwk, privateJwk }) {
+  const algorithm = { name: 'ECDSA', namedCurve: 'P-256' };
+  const [publicKey, privateKey] = await Promise.all([
+    crypto.subtle.importKey('jwk', publicJwk, algorithm, true, ['verify']),
+    crypto.subtle.importKey('jwk', privateJwk, algorithm, false, ['sign']),
+  ]);
+  return client.getDPoPHandle(config, { publicKey, privateKey });
+}
 
 const app = express();
 
@@ -87,7 +105,7 @@ app.get('/', (req, res) => {
           <li>amr: ${escapeHtml(user.amr.join(', ') || 'N/A')}</li>
           <li>acr: ${escapeHtml(user.acr || 'N/A')}</li>
           <li>hardware_verified: ${user.hardwareVerified}</li>
-          <li>cnf.jkt: ${escapeHtml(user.cnfJkt || 'N/A')}</li>
+          <li>cnf.jkt: ${escapeHtml(user.cnfJkt)}</li>
         </ul>
         <ul>
           <li><a href="/userinfo">UserInfo</a></li>
@@ -117,8 +135,9 @@ app.get('/auth/vouch', async (req, res) => {
   const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
   const state = client.randomState();
   const nonce = client.randomNonce();
+  const dpopKeys = await newDPoPKeys();
 
-  req.session.oidc = { codeVerifier, state, nonce };
+  req.session.oidc = { codeVerifier, state, nonce, dpopKeys };
 
   const redirectTo = client.buildAuthorizationUrl(config, {
     redirect_uri: callbackUrl,
@@ -127,6 +146,8 @@ app.get('/auth/vouch', async (req, res) => {
     code_challenge_method: 'S256',
     state,
     nonce,
+    // Binds the code to this key: Vouch refuses to redeem it with a proof from any other.
+    dpop_jkt: await calculateJwkThumbprint(dpopKeys.publicJwk),
   });
 
   res.redirect(redirectTo.href);
@@ -134,7 +155,7 @@ app.get('/auth/vouch', async (req, res) => {
 
 app.get('/auth/vouch/callback', async (req, res) => {
   try {
-    const { codeVerifier, state, nonce } = req.session.oidc || {};
+    const { codeVerifier, state, nonce, dpopKeys } = req.session.oidc || {};
     delete req.session.oidc;
 
     const currentUrl = new URL(req.url, `http://${req.headers.host}`);
@@ -147,11 +168,17 @@ app.get('/auth/vouch/callback', async (req, res) => {
         expectedNonce: nonce,
       },
       undefined,
-      { DPoP: dpop },
+      { DPoP: await dpopHandle(dpopKeys) },
     );
 
     const claims = tokens.claims();
     const atClaims = await verifyAccessToken(tokens.access_token);
+
+    // Without this check a token Vouch issued as a plain bearer token would be
+    // accepted and silently used as one.
+    if (atClaims.cnf?.jkt !== (await calculateJwkThumbprint(dpopKeys.publicJwk))) {
+      throw new Error('Access token is not bound to this sign-in\'s DPoP key');
+    }
     req.session.user = {
       id: claims.sub,
       email: claims.email,
@@ -160,8 +187,10 @@ app.get('/auth/vouch/callback', async (req, res) => {
       amr: claims.amr || [],
       hardwareVerified: atClaims.hardware_verified || false,
       // Thumbprint of the DPoP key the access token is bound to (RFC 9449 section 6).
-      cnfJkt: atClaims.cnf?.jkt || null,
+      cnfJkt: atClaims.cnf.jkt,
     };
+
+    req.session.dpopKeys = dpopKeys;
 
     req.session.tokens = {
       accessToken: tokens.access_token,
@@ -219,7 +248,7 @@ app.get('/userinfo', requireAuth, async (req, res) => {
     // A DPoP-bound token must be presented with the DPoP scheme and a fresh proof;
     // Vouch rejects it as a plain Bearer token.
     const userinfo = await client.fetchUserInfo(config, accessToken, req.session.user.id, {
-      DPoP: dpop,
+      DPoP: await dpopHandle(req.session.dpopKeys),
     });
     res.send(`
       <!DOCTYPE html>
