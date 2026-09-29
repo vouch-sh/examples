@@ -55,6 +55,10 @@ for (const example of MCP_EXAMPLES) {
     // Separate web app for obtaining an access token
     let tokenApp;
     let accessToken;
+    // The RFC 8707 `resource` to request, read from the server's RFC 9728 metadata the
+    // way an MCP client does. Vouch copies it into `aud` verbatim, so a hand-built value
+    // that differs only by a trailing slash would yield a token the server rejects.
+    let resource;
 
     test.beforeAll(async () => {
       port = await getRandomPort();
@@ -80,14 +84,19 @@ for (const example of MCP_EXAMPLES) {
           VOUCH_CLIENT_SECRET: mcpApp.client_secret,
           VOUCH_REDIRECT_URI: callbackUrl,
           // The container listens on 3000 internally but is published on a random
-          // host port, so it cannot derive its own resource identifier. This is the
-          // value clients send as the RFC 8707 `resource` parameter and the value
-          // the server validates `aud` against.
+          // host port, so it cannot derive its own resource identifier. The server
+          // publishes it (possibly normalized) in its RFC 9728 metadata, which is
+          // what clients send as the RFC 8707 `resource` and what `aud` must equal.
           VOUCH_AUDIENCE: baseUrl,
         },
       });
 
       await waitForReady(port);
+
+      const metadata = await fetch(
+        `${baseUrl}/.well-known/oauth-protected-resource`,
+      ).then((res) => res.json());
+      resource = metadata.resource;
     });
 
     test.afterAll(async () => {
@@ -199,7 +208,7 @@ for (const example of MCP_EXAMPLES) {
         clientId: tokenApp.client_id,
         clientSecret: tokenApp.client_secret,
         redirectUri: callbackUrl,
-        resource: baseUrl,
+        resource,
       });
 
       await context.close();
@@ -250,7 +259,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource,
         });
 
         await context.close();
@@ -342,7 +351,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource,
         });
 
         await context.close();
