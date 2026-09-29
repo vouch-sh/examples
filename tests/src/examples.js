@@ -4,7 +4,7 @@
  * app type, login/logout selectors, and callback path.
  */
 
-/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean, revokesOnLogout?: boolean }>} */
 const WEB_EXAMPLES = [
   {
     name: "express-openid",
@@ -17,6 +17,9 @@ const WEB_EXAMPLES = [
     // Signs out at Vouch too, so logout goes via the end_session endpoint and
     // stops on Vouch's confirmation page before returning here.
     rpInitiatedLogout: true,
+    // Revokes its access token on sign-out, which on Vouch ends every session the
+    // user has -- see the logout test in tests/web.spec.js.
+    revokesOnLogout: true,
   },
   {
     name: "nextjs-nextauth",
@@ -127,7 +130,7 @@ const WEB_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string, rpInitiatedLogout?: boolean }>} */
+/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string }>} */
 const SPA_EXAMPLES = [
   {
     name: "react",
@@ -136,7 +139,6 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
-    rpInitiatedLogout: true,
   },
   {
     name: "vue",
@@ -145,7 +147,6 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
-    rpInitiatedLogout: true,
   },
   {
     name: "angular",
@@ -154,7 +155,6 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "logoff()",
-    rpInitiatedLogout: true,
   },
   {
     name: "sveltekit",
@@ -163,7 +163,6 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
-    rpInitiatedLogout: true,
   },
   {
     name: "vanilla-js",
@@ -172,7 +171,6 @@ const SPA_EXAMPLES = [
     loginSelector: "button#login-btn",
     logoutSelector: "button#logout-btn",
     logoutMethod: "signoutRedirect()",
-    rpInitiatedLogout: true,
   },
 ];
 

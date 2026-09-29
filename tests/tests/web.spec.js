@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
-const { setupContext, handleAuthorize } = require("../src/oidc-flow");
+const { setupContext, handleAuthorize, expectRpInitiatedLogout } = require("../src/oidc-flow");
 const { WEB_EXAMPLES } = require("../src/examples");
 const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
@@ -170,7 +170,7 @@ for (const example of WEB_EXAMPLES) {
     });
 
     test("logout flow", async ({ browser }) => {
-      if (example.rpInitiatedLogout) {
+      if (example.revokesOnLogout) {
         // Cannot be exercised unattended. These examples revoke their access token
         // on sign-out (RFC 7009), and Vouch revokes by user rather than by token --
         // `delete_sessions_for_user` in services/oidc/introspection.rs. This suite
@@ -213,6 +213,25 @@ for (const example of WEB_EXAMPLES) {
       // Now, log out
       const logoutElement = page.locator(example.logoutSelector).first();
       await expect(logoutElement).toBeVisible({ timeout: 5_000 });
+
+      if (example.rpInitiatedLogout) {
+        await expectRpInitiatedLogout(page, {
+          triggerAction: () => logoutElement.click(),
+          clientId: app.client_id,
+          postLogoutRedirectUri: `${baseUrl}/`,
+        });
+
+        // The app destroyed its own session before handing off to Vouch.
+        await page.goto(baseUrl);
+        await expect(page.locator(example.loginSelector).first()).toBeVisible({
+          timeout: 5_000,
+        });
+        await expect(page.locator("body")).not.toContainText("Signed in as");
+
+        await context.close();
+        return;
+      }
+
       await logoutElement.click();
       await page.waitForLoadState("networkidle", { timeout: 10_000 });
 

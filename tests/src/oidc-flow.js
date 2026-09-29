@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { expect } = require("@playwright/test");
 const { VOUCH_ISSUER_URL, VOUCH_DOMAIN, VOUCH_INSECURE } = require("./config");
 
 /** Origin of the Vouch issuer (e.g. "https://us.vouch.sh" or "http://localhost:3000"). */
@@ -97,6 +98,51 @@ async function handleAuthorize(page, opts) {
     });
   }
   // Otherwise auto-consent already completed the full redirect chain.
+}
+
+/**
+ * Trigger an RP-initiated sign-out and check the request it makes to Vouch's
+ * end_session endpoint, stopping on the confirmation page.
+ *
+ * The confirmation is deliberately never submitted: confirming deletes the Vouch
+ * browser session, which is the developer's own session cookie this suite injects,
+ * and every later test would fail until they ran `vouch login` again.
+ *
+ * @param {import("@playwright/test").Page} page
+ * @param {{
+ *   triggerAction: () => Promise<void>,
+ *   clientId: string,
+ *   postLogoutRedirectUri: string,
+ *   timeout?: number,
+ * }} opts
+ */
+async function expectRpInitiatedLogout(page, opts) {
+  const timeout = opts.timeout ?? 10_000;
+
+  await Promise.all([
+    page.waitForURL(
+      (url) => url.origin === VOUCH_ORIGIN && url.pathname === "/oauth/logout",
+      { timeout },
+    ),
+    opts.triggerAction(),
+  ]);
+
+  const logoutUrl = new URL(page.url());
+  expect(logoutUrl.searchParams.get("post_logout_redirect_uri")).toBe(
+    opts.postLogoutRedirectUri,
+  );
+  const idTokenHint = logoutUrl.searchParams.get("id_token_hint");
+  expect(idTokenHint).toBeTruthy();
+  const hintClaims = JSON.parse(
+    Buffer.from(idTokenHint.split(".")[1], "base64url").toString(),
+  );
+  expect(hintClaims.aud).toBe(opts.clientId);
+
+  // Vouch's confirmation form (templates/logout_confirm.html) -- proof that the
+  // flow stopped before the session was cleared.
+  await expect(page.locator('form[action="/oauth/logout"]')).toBeVisible({
+    timeout,
+  });
 }
 
 /**
@@ -283,6 +329,7 @@ module.exports = {
   injectVouchCookie,
   setupContext,
   handleAuthorize,
+  expectRpInitiatedLogout,
   handleDeviceFlow,
   obtainTokens,
   obtainAccessToken,

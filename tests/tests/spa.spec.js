@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
-const { setupContext, handleAuthorize } = require("../src/oidc-flow");
+const { setupContext, handleAuthorize, expectRpInitiatedLogout } = require("../src/oidc-flow");
 const { SPA_EXAMPLES } = require("../src/examples");
 const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
@@ -35,6 +35,8 @@ for (const example of SPA_EXAMPLES) {
         name: appName,
         applicationType: "spa",
         redirectUris: [redirectUri],
+        // Every SPA sends window.location.origin, which has no trailing slash.
+        postLogoutRedirectUris: [baseUrl],
       });
 
       // Build and run Docker container (--network=host + PORT env var)
@@ -98,16 +100,6 @@ for (const example of SPA_EXAMPLES) {
     });
 
     test("logout flow", async ({ browser }) => {
-      if (example.rpInitiatedLogout) {
-        // Cannot be exercised unattended. Sign-out goes through Vouch's end_session
-        // endpoint, which stops on a confirmation page and, once confirmed, deletes
-        // the browser session -- the developer's own session cookie this suite
-        // injects, so the rest of the run would fail until they `vouch login` again.
-        // Verify by hand, or against a throwaway Vouch account.
-        test.skip();
-        return;
-      }
-
       const context = await browser.newContext();
       await setupContext(context, cookie);
       const page = await context.newPage();
@@ -124,26 +116,21 @@ for (const example of SPA_EXAMPLES) {
         timeout: 10_000,
       });
 
-      // Now, log out
+      // Now, log out -- every SPA hands off to Vouch's end_session endpoint
       const logoutElement = page.locator(example.logoutSelector).first();
       await expect(logoutElement).toBeVisible({ timeout: 5_000 });
-      await logoutElement.click();
+      await expectRpInitiatedLogout(page, {
+        triggerAction: () => logoutElement.click(),
+        clientId: app.client_id,
+        postLogoutRedirectUri: baseUrl,
+      });
 
-      // Wait for SPA client-side state to clear
-      // Some SPAs redirect to Vouch for logout, then back to app
-      try {
-        await page.waitForURL((url) => url.hostname === "localhost", {
-          timeout: 5_000,
-        });
-      } catch {
-        // Already on localhost (removeUser-style logout)
-      }
-
-      await page.waitForLoadState("networkidle", { timeout: 5_000 });
-
-      // Verify returned to unauthenticated state
+      // The local session must already be gone: the SPA cleared it before leaving,
+      // not on the way back from Vouch.
+      await page.goto(baseUrl);
       const loginAgain = page.locator(example.loginSelector).first();
       await expect(loginAgain).toBeVisible({ timeout: 5_000 });
+      await expect(page.locator("body")).not.toContainText("Signed in as");
 
       await context.close();
     });
