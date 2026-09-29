@@ -34,16 +34,22 @@ class VouchTokenVerifier(TokenVerifier):
             payload = jwt.decode(
                 token,
                 signing_key.key,
-                algorithms=[signing_key.algorithm_name],
+                # Vouch signs access tokens with ES256 only. Taking the algorithm from
+                # the JWKS entry instead would trust whatever the key set advertises.
+                algorithms=["ES256"],
                 issuer=VOUCH_ISSUER,
                 # Without an audience check, any Vouch-issued token is accepted here,
                 # including one minted for an unrelated client. The client must request
                 # this resource (RFC 8707) so `aud` is narrowed to us.
                 audience=RESOURCE,
+                options={"require": ["exp", "iat", "sub", "client_id"]},
             )
             return AccessToken(
                 token=token,
-                client_id=payload.get("sub"),
+                # RFC 9068 `client_id` is the OAuth client the token was issued to;
+                # `sub` is the user it acts for.
+                client_id=payload["client_id"],
+                subject=payload["sub"],
                 scopes=payload.get("scope", "").split()
                 if isinstance(payload.get("scope"), str)
                 else [],
@@ -51,7 +57,7 @@ class VouchTokenVerifier(TokenVerifier):
                 # SDK's own per-request auth context rather than a side channel.
                 claims=payload,
             )
-        except Exception:
+        except jwt.PyJWTError:
             return None
 
 
