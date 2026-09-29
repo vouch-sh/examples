@@ -2,7 +2,10 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+# No fallback: a default key baked into the source lets anyone forge sessions for
+# every deployment that forgot to set one. Left empty, Django refuses to use it
+# (ImproperlyConfigured) while still allowing the build-time `migrate`.
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
 # Off unless asked for: debug pages expose settings and stack traces.
 DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
 # Comma-separated. The default is what Django itself allows in development.

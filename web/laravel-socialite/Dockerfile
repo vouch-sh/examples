@@ -14,7 +14,7 @@ RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist
 COPY . .
 RUN composer dump-autoload
 
-RUN cp .env.example .env && php artisan key:generate --force
+RUN cp .env.example .env
 RUN touch database/database.sqlite
 
 EXPOSE 3000

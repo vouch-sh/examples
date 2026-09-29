@@ -63,6 +63,8 @@ start() {
     -e VOUCH_REDIRECT_URI=http://localhost:3000/callback \
     -e NEXTAUTH_URL=http://localhost:3000 \
     -e NEXTAUTH_SECRET=smoke-secret-value-0123456789abcdef \
+    -e SECRET_KEY=smoke-secret-key-0123456789abcdef \
+    -e APP_KEY=base64:c21va2UtYXBwLWtleS0wMTIzNDU2Nzg5YWJjZGVmISE= \
     "$IMAGE" >/dev/null
 }
 

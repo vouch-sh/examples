@@ -14,11 +14,14 @@ VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
 
 jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
+# No fallback: a default secret baked into the source lets anyone forge session
+# cookies for every deployment that forgot to set one.
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError('SECRET_KEY is required')
+
 app = FastAPI()
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.environ.get('SECRET_KEY', 'dev-secret-change-in-production'),
-)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 oauth = OAuth()
 oauth.register(

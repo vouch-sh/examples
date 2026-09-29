@@ -9,7 +9,11 @@ from flask import Flask, redirect, render_template_string, session, url_for
 from jwt import PyJWKClient
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
+# No fallback: a default secret baked into the source lets anyone forge session
+# cookies for every deployment that forgot to set one.
+app.secret_key = os.environ.get('SECRET_KEY')
+if not app.secret_key:
+    raise RuntimeError('SECRET_KEY is required')
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')

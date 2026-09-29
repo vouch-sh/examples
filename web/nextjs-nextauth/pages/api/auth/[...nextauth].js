@@ -60,5 +60,7 @@ export default NextAuth({
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || 'dev-secret-change-in-production',
+  // No fallback: a default secret baked into the source lets anyone forge session
+  // cookies. Without one, NextAuth refuses to run in production (NO_SECRET).
+  secret: process.env.NEXTAUTH_SECRET,
 });

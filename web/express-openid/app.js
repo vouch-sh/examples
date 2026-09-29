@@ -12,8 +12,15 @@ const config = await client.discovery(new URL(issuer), clientId, clientSecret);
 
 const app = express();
 
+// No fallback: a default secret baked into the source lets anyone forge session
+// cookies for every deployment that forgot to set one.
+const sessionSecret = process.env.SECRET_KEY;
+if (!sessionSecret) {
+  throw new Error('SECRET_KEY is required');
+}
+
 app.use(session({
-  secret: process.env.SECRET_KEY || 'dev-secret-change-in-production',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
 }));

@@ -7,10 +7,7 @@ const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 // Vouch shows a confirmation page and redirects back only when id_token_hint verifies
 // and post_logout_redirect_uri is registered on the client.
 export default async function handler(req, res) {
-  const token = await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET || 'dev-secret-change-in-production',
-  });
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   const discovery = await fetch(`${issuer}/.well-known/openid-configuration`);
   const { end_session_endpoint: endSession } = await discovery.json();
