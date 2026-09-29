@@ -37,10 +37,20 @@ const config = await client.discovery(
   clientSecret,
 );
 
-// DPoP (RFC 9449): the access token is bound to a key pair this server holds, so a
-// token leaked from the session store or a log is useless on its own. The pair is kept
-// as JWKs in the server-side session next to the token it is bound to -- the default
+// DPoP (RFC 9449): the authorization code and the access token are bound to a key pair
+// this server holds, so neither is usable on its own if intercepted or leaked. The pair
+// is created at /auth/login and kept as JWKs in the server-side session -- the default
 // session store serializes to JSON, which a CryptoKey does not survive.
+async function newDPoPKeys() {
+  const { publicKey, privateKey } = await client.randomDPoPKeyPair('ES256', {
+    extractable: true,
+  });
+  return {
+    publicJwk: await crypto.subtle.exportKey('jwk', publicKey),
+    privateJwk: await crypto.subtle.exportKey('jwk', privateKey),
+  };
+}
+
 async function dpopHandle({ publicJwk, privateJwk }) {
   const algorithm = { name: 'ECDSA', namedCurve: 'P-256' };
   const [publicKey, privateKey] = await Promise.all([
@@ -73,8 +83,9 @@ app.get('/auth/login', async (req, res) => {
     await client.calculatePKCECodeChallenge(codeVerifier);
   const state = client.randomState();
   const nonce = client.randomNonce();
+  const dpopKeys = await newDPoPKeys();
 
-  req.session.oidc = { codeVerifier, state, nonce };
+  req.session.oidc = { codeVerifier, state, nonce, dpopKeys };
 
   const redirectTo = client.buildAuthorizationUrl(config, {
     redirect_uri: callbackUrl,
@@ -83,6 +94,8 @@ app.get('/auth/login', async (req, res) => {
     code_challenge_method: 'S256',
     state,
     nonce,
+    // Binds the code to this key: Vouch refuses to redeem it with a proof from any other.
+    dpop_jkt: await calculateJwkThumbprint(dpopKeys.publicJwk),
   });
 
   res.redirect(redirectTo.href);
@@ -90,7 +103,7 @@ app.get('/auth/login', async (req, res) => {
 
 app.get('/auth/callback', async (req, res) => {
   try {
-    const { codeVerifier, state, nonce } = req.session.oidc || {};
+    const { codeVerifier, state, nonce, dpopKeys } = req.session.oidc || {};
     delete req.session.oidc;
 
     // Built from the configured redirect URI, not the Host header, which the client
@@ -99,7 +112,6 @@ app.get('/auth/callback', async (req, res) => {
 
     // Vouch's token endpoint always answers the first DPoP proof with use_dpop_nonce;
     // openid-client caches the DPoP-Nonce it returns and retries once.
-    const dpopKeys = await client.randomDPoPKeyPair('ES256', { extractable: true });
     const tokens = await client.authorizationCodeGrant(
       config,
       currentUrl,
@@ -109,7 +121,7 @@ app.get('/auth/callback', async (req, res) => {
         expectedNonce: nonce,
       },
       undefined,
-      { DPoP: client.getDPoPHandle(config, dpopKeys) },
+      { DPoP: await dpopHandle(dpopKeys) },
     );
 
     const claims = tokens.claims();
@@ -117,8 +129,7 @@ app.get('/auth/callback', async (req, res) => {
 
     // Without this check a token Vouch issued as a plain bearer token would be
     // accepted and silently used as one.
-    const publicJwk = await crypto.subtle.exportKey('jwk', dpopKeys.publicKey);
-    if (atClaims.cnf?.jkt !== (await calculateJwkThumbprint(publicJwk))) {
+    if (atClaims.cnf?.jkt !== (await calculateJwkThumbprint(dpopKeys.publicJwk))) {
       throw new Error('Access token is not bound to this server\'s DPoP key');
     }
 
@@ -137,10 +148,7 @@ app.get('/auth/callback', async (req, res) => {
       dpopJkt: atClaims.cnf.jkt,
     };
 
-    req.session.dpopKeys = {
-      publicJwk,
-      privateJwk: await crypto.subtle.exportKey('jwk', dpopKeys.privateKey),
-    };
+    req.session.dpopKeys = dpopKeys;
 
     req.session.tokens = {
       accessToken: tokens.access_token,
