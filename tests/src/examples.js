@@ -238,7 +238,12 @@ const NATIVE_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean }>} */
+/**
+ * `dpop` marks servers that accept RFC 9449 DPoP-bound tokens (`Authorization: DPoP`
+ * plus a proof) and challenge with both Bearer and DPoP.
+ *
+ * @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean, dpop?: boolean }>}
+ */
 const MCP_EXAMPLES = [
   {
     name: "mcp-remote-server-ts",
@@ -251,6 +256,7 @@ const MCP_EXAMPLES = [
     dir: "mcp/remote-server-py",
     type: "mcp",
     hasWhoami: true,
+    dpop: true,
   },
   {
     name: "mcp-credential-broker",
