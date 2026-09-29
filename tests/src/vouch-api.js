@@ -130,8 +130,12 @@ function base64url(buf) {
 /**
  * Create a DPoP proof JWT for a request (RFC 9449).
  *
+ * `token` adds the `ath` hash that binds a proof to the access token it
+ * accompanies (resource requests); `nonce` echoes a server-issued DPoP-Nonce
+ * (token endpoint).
+ *
  * @param {crypto.KeyObject} privateKey
- * @param {{ method: string, url: string, token: string }} opts
+ * @param {{ method: string, url: string, token?: string, nonce?: string }} opts
  * @returns {string}
  */
 function createDpopProof(privateKey, opts) {
@@ -143,14 +147,18 @@ function createDpopProof(privateKey, opts) {
     jwk: { kty: publicJwk.kty, crv: publicJwk.crv, x: publicJwk.x, y: publicJwk.y },
   };
 
-  const tokenHash = crypto.createHash("sha256").update(opts.token).digest();
   const payload = {
     jti: crypto.randomUUID(),
     htm: opts.method,
     htu: opts.url,
     iat: Math.floor(Date.now() / 1000),
-    ath: base64url(tokenHash),
   };
+  if (opts.token) {
+    payload.ath = base64url(crypto.createHash("sha256").update(opts.token).digest());
+  }
+  if (opts.nonce) {
+    payload.nonce = opts.nonce;
+  }
 
   const headerB64 = base64url(Buffer.from(JSON.stringify(header)));
   const payloadB64 = base64url(Buffer.from(JSON.stringify(payload)));
@@ -309,6 +317,7 @@ module.exports = {
   loadCookie,
   loadToken,
   loadDpopKey,
+  createDpopProof,
   createApp,
   deleteApp,
   listApps,

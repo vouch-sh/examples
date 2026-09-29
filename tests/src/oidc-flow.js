@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const { VOUCH_ISSUER_URL, VOUCH_DOMAIN, VOUCH_INSECURE } = require("./config");
+const { createDpopProof } = require("./vouch-api");
 
 /** Origin of the Vouch issuer (e.g. "https://us.vouch.sh" or "http://localhost:3000"). */
 const VOUCH_ORIGIN = new URL(VOUCH_ISSUER_URL).origin;
@@ -177,10 +178,14 @@ async function handleDeviceFlow(page, verificationUrl, userCode, opts) {
  *   issuer?: string,
  *   resource?: string,
  *   acrValues?: string,
+ *   dpopKey?: crypto.KeyObject,
  * }} opts
  *   `resource` sends an RFC 8707 resource indicator, which narrows the access token's
  *   `aud` to that value. Resource servers need this to validate audience, since the
  *   default `aud` is the calling client's own client_id.
+ *   `dpopKey` sends a DPoP proof with the code exchange, so the access token comes
+ *   back bound to that key (`cnf.jkt`, RFC 9449) and must be presented with the
+ *   `DPoP` scheme plus a fresh proof.
  * @returns {Promise<object>} the full token response (access_token, id_token, ...)
  */
 async function obtainTokens(context, opts) {
@@ -231,18 +236,32 @@ async function obtainTokens(context, opts) {
     }
 
     // Exchange the code for tokens (with PKCE code_verifier)
-    const tokenRes = await fetch(`${issuer}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: opts.redirectUri,
-        client_id: opts.clientId,
-        client_secret: opts.clientSecret,
-        code_verifier: codeVerifier,
-      }),
-    });
+    const tokenUrl = `${issuer}/oauth/token`;
+    const exchange = (nonce) =>
+      fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          ...(opts.dpopKey && {
+            DPoP: createDpopProof(opts.dpopKey, { method: "POST", url: tokenUrl, nonce }),
+          }),
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: opts.redirectUri,
+          client_id: opts.clientId,
+          client_secret: opts.clientSecret,
+          code_verifier: codeVerifier,
+        }),
+      });
+    let tokenRes = await exchange();
+    // RFC 9449 §8: Vouch's token endpoint answers a proof without a nonce with
+    // use_dpop_nonce and a DPoP-Nonce header; the retry must echo that nonce.
+    const dpopNonce = tokenRes.headers.get("dpop-nonce");
+    if (opts.dpopKey && tokenRes.status === 400 && dpopNonce) {
+      tokenRes = await exchange(dpopNonce);
+    }
 
     if (!tokenRes.ok) {
       const body = await tokenRes.text();
