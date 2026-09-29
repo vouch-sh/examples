@@ -85,7 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_id =
         std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID environment variable is required");
 
-    let client = Client::new();
+    // reqwest has no default timeout, so an unresponsive issuer would hang the CLI forever.
+    let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
 
     // Step 1: Request device code
     let device_response: DeviceResponse = client

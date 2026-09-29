@@ -8,13 +8,15 @@ from jwt import PyJWKClient
 
 VOUCH_ISSUER = os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh")
 CLIENT_ID = os.environ.get("VOUCH_CLIENT_ID")
+# requests has no default timeout, so an unresponsive issuer would hang the CLI forever.
+REQUEST_TIMEOUT = 10
 
 if not CLIENT_ID:
     print("Error: VOUCH_CLIENT_ID environment variable is required")
     sys.exit(1)
 
 
-jwks_client = PyJWKClient(f"{VOUCH_ISSUER}/oauth/jwks")
+jwks_client = PyJWKClient(f"{VOUCH_ISSUER}/oauth/jwks", timeout=REQUEST_TIMEOUT)
 
 
 def verify_access_token(token):
@@ -42,7 +44,7 @@ def fetch_userinfo(access_token):
     resp = requests.get(
         f"{VOUCH_ISSUER}/oauth/userinfo",
         headers={"Authorization": f"Bearer {access_token}"},
-        timeout=10,
+        timeout=REQUEST_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
@@ -55,6 +57,7 @@ response = requests.post(
         "client_id": CLIENT_ID,
         "scope": "openid email",
     },
+    timeout=REQUEST_TIMEOUT,
 )
 response.raise_for_status()
 device_data = response.json()
@@ -80,6 +83,7 @@ while True:
             "device_code": device_data["device_code"],
             "client_id": CLIENT_ID,
         },
+        timeout=REQUEST_TIMEOUT,
     )
 
     if token_response.status_code == 200:

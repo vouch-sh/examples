@@ -2,6 +2,8 @@ import { createPublicKey, verify as verifySignature } from 'node:crypto';
 
 const VOUCH_ISSUER = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const CLIENT_ID = process.env.VOUCH_CLIENT_ID;
+// fetch has no default timeout, so an unresponsive issuer would hang the CLI forever.
+const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * Verify a Vouch access token against the issuer's published JWKS.
@@ -27,7 +29,9 @@ async function verifyAccessToken(token) {
   // which is attacker-controlled until the signature has been checked.
   if (header.alg !== 'ES256') throw new Error(`unexpected token alg: ${header.alg}`);
 
-  const jwks = await (await fetch(`${VOUCH_ISSUER}/oauth/jwks`)).json();
+  const jwks = await (
+    await fetch(`${VOUCH_ISSUER}/oauth/jwks`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+  ).json();
   const jwk = jwks.keys.find((k) => k.kid === header.kid);
   if (!jwk) throw new Error(`kid ${header.kid} not published in JWKS`);
   // node:crypto picks the algorithm from the key, so an RSA key under this kid would be
@@ -58,6 +62,7 @@ if (!CLIENT_ID) {
 async function fetchUserInfo(accessToken) {
   const response = await fetch(`${VOUCH_ISSUER}/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`UserInfo request failed: ${response.status}`);
@@ -74,6 +79,7 @@ async function deviceFlow() {
       client_id: CLIENT_ID,
       scope: 'openid email',
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!deviceResponse.ok) {
@@ -106,6 +112,7 @@ async function deviceFlow() {
         device_code: deviceData.device_code,
         client_id: CLIENT_ID,
       }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (tokenResponse.ok) {
