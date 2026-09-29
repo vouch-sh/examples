@@ -63,6 +63,10 @@ for (const example of A2A_EXAMPLES) {
     const appName = `${APP_PREFIX}${example.name}`;
     let port;
     let baseUrl;
+    // The canonical RFC 9728 resource identifier: the WHATWG-normalised URL, trailing
+    // slash included. Vouch copies `resource` into `aud` verbatim, so tokens must be
+    // requested with exactly the value the server publishes and checks.
+    let resource;
     let callbackUrl;
     let a2aApp;
     let tokenApp;
@@ -71,6 +75,7 @@ for (const example of A2A_EXAMPLES) {
     test.beforeAll(async () => {
       port = await getRandomPort();
       baseUrl = `http://localhost:${port}`;
+      resource = new URL(baseUrl).href;
       callbackUrl = `${baseUrl}/callback`;
 
       // Create the A2A server's Vouch app
@@ -137,6 +142,19 @@ for (const example of A2A_EXAMPLES) {
       expect(agentCard.supportedInterfaces[0].url).toBe(`${baseUrl}/`);
     });
 
+    test("RFC 9728 protected resource metadata", async () => {
+      const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+      expect(res.status).toBe(200);
+      const metadata = await res.json();
+      // Exact comparisons: clients send `resource` back as the RFC 8707 parameter and
+      // match authorization_servers against the issuer's `iss` (RFC 8414 §3.3).
+      expect(metadata.resource).toBe(resource);
+      expect(metadata.authorization_servers).toEqual([VOUCH_ISSUER_URL]);
+      expect(metadata.scopes_supported).toEqual(["openid", "email"]);
+      expect(metadata.bearer_methods_supported).toEqual(["header"]);
+      expect(metadata.dpop_signing_alg_values_supported).toEqual(["ES256", "PS256", "EdDSA"]);
+    });
+
     test("rejects unauthenticated requests", async () => {
       const res = await fetch(`${baseUrl}/`, {
         method: "POST",
@@ -156,8 +174,11 @@ for (const example of A2A_EXAMPLES) {
       });
       expect(res.status).toBe(401);
       const challenge = res.headers.get("www-authenticate");
-      expect(challenge).toMatch(/^Bearer\b/);
-      expect(challenge).toMatch(/, DPoP algs="/);
+      const metadataUrl = `${baseUrl}/.well-known/oauth-protected-resource`;
+      expect(challenge).toBe(
+        `Bearer resource_metadata="${metadataUrl}", ` +
+          `DPoP algs="ES256 PS256 EdDSA", resource_metadata="${metadataUrl}"`,
+      );
       // RFC 6750 §3.1: no error code when the request carried no credentials.
       expect(challenge).not.toContain("error=");
     });
@@ -187,7 +208,7 @@ for (const example of A2A_EXAMPLES) {
         clientId: tokenApp.client_id,
         clientSecret: tokenApp.client_secret,
         redirectUri: callbackUrl,
-        resource: baseUrl,
+        resource,
       });
 
       await context.close();
@@ -222,7 +243,7 @@ for (const example of A2A_EXAMPLES) {
           clientId: dpopApp.client_id,
           clientSecret: dpopApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource,
           dpopKey: privateKey,
         });
         const payload = JSON.parse(Buffer.from(bound.split(".")[1], "base64url"));

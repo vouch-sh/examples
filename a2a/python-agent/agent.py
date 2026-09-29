@@ -30,19 +30,33 @@ from a2a.types import (
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL
 from jwt import PyJWK, PyJWKClient
+from pydantic import AnyHttpUrl
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 VOUCH_ISSUER = os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh")
 PORT = int(os.environ.get("PORT", "3000"))
 
 # This agent's resource identifier. Callers pass it as the RFC 8707 `resource`
 # parameter when they authorize, so Vouch narrows the access token's `aud` to it
-# and we can prove the token was minted for us specifically.
-RESOURCE = os.environ.get("VOUCH_AUDIENCE", f"http://localhost:{PORT}")
+# and we can prove the token was minted for us specifically. Vouch copies it
+# verbatim, so the metadata and the audience check use one exact string: the
+# WHATWG-normalised URL (`http://localhost:3000/`, trailing slash included), which
+# is what clients get from `new URL(...).href`.
+RESOURCE = str(AnyHttpUrl(os.environ.get("VOUCH_AUDIENCE", f"http://localhost:{PORT}")))
+
+# A2A has no field for a resource indicator, so the agent publishes RFC 9728
+# Protected Resource Metadata and points 401 challenges at it (RFC 9728 §5.1).
+# §3.1: the well-known segment goes between the host and any path.
+_resource_parts = urlsplit(RESOURCE)
+METADATA_PATH = "/.well-known/oauth-protected-resource" + (
+    "" if _resource_parts.path == "/" else _resource_parts.path
+)
+METADATA_URL = f"{_resource_parts.scheme}://{_resource_parts.netloc}{METADATA_PATH}"
 
 # Vouch only issues these two scopes; anything else is silently dropped.
 SCOPES = ["openid", "email"]
@@ -185,7 +199,15 @@ def authenticate(request: Request) -> dict | None:
     except jwt.PyJWTError as exc:
         raise AuthError(scheme, "invalid_token", "access token is invalid") from exc
 
-    jkt = (claims.get("cnf") or {}).get("jkt")
+    cnf = claims.get("cnf") or {}
+    # RFC 8705 §3: a certificate-bound token is only usable over mutual TLS with that
+    # certificate. This agent never sees a client certificate, so it cannot verify
+    # the binding and must not treat the token as a bearer credential.
+    if "x5t#S256" in cnf:
+        raise AuthError(
+            scheme, "invalid_token", "certificate-bound tokens are not accepted"
+        )
+    jkt = cnf.get("jkt")
     if scheme == "bearer":
         # RFC 9449 §7.2: a DPoP-bound token sent as Bearer is being used without
         # proof of possession, which is exactly what binding exists to prevent.
@@ -207,17 +229,36 @@ def authenticate(request: Request) -> dict | None:
 
 
 def www_authenticate(error: AuthError | None) -> str:
-    # One challenge per accepted scheme (RFC 9110 §11.6.1); the error, when there is
-    # one, goes on the scheme the client used. RFC 6750 §3.1: a request with no
-    # credentials gets no error code.
-    challenges = {"bearer": [], "dpop": [f'algs="{" ".join(DPOP_ALGORITHMS)}"']}
+    # One challenge per accepted scheme (RFC 9110 §11.6.1). Both point at our RFC 9728
+    # metadata; the error, when there is one, goes on the scheme the client used.
+    # RFC 6750 §3.1: a request with no credentials gets no error code.
+    challenges = {
+        "bearer": [f'resource_metadata="{METADATA_URL}"'],
+        "dpop": [
+            f'algs="{" ".join(DPOP_ALGORITHMS)}"',
+            f'resource_metadata="{METADATA_URL}"',
+        ],
+    }
     if error:
         challenges[error.scheme][:0] = [
             f'error="{error.error}"',
             f'error_description="{error.description}"',
         ]
-    bearer = " ".join(["Bearer", ", ".join(challenges["bearer"])]).rstrip()
-    return f"{bearer}, DPoP {', '.join(challenges['dpop'])}"
+    return f"Bearer {', '.join(challenges['bearer'])}, DPoP {', '.join(challenges['dpop'])}"
+
+
+async def protected_resource_metadata(_request: Request) -> JSONResponse:
+    return JSONResponse(
+        {
+            "resource": RESOURCE,
+            # Must equal the issuer string exactly: clients compare it with the `iss`
+            # in the authorization server's metadata (RFC 8414 §3.3).
+            "authorization_servers": [VOUCH_ISSUER],
+            "scopes_supported": SCOPES,
+            "bearer_methods_supported": ["header"],
+            "dpop_signing_alg_values_supported": DPOP_ALGORITHMS,
+        }
+    )
 
 
 class IdentityAgentExecutor(AgentExecutor):
@@ -316,8 +357,8 @@ handler = DefaultRequestHandler(
 
 
 async def auth_middleware(request: Request, call_next):
-    # Allow unauthenticated access to agent card discovery
-    if request.url.path == AGENT_CARD_WELL_KNOWN_PATH:
+    # Discovery documents are public: the agent card and the resource metadata
+    if request.url.path in (AGENT_CARD_WELL_KNOWN_PATH, METADATA_PATH):
         return await call_next(request)
 
     error = None
@@ -345,6 +386,7 @@ async def auth_middleware(request: Request, call_next):
 app = Starlette(
     routes=[
         *create_agent_card_routes(agent_card),
+        Route(METADATA_PATH, endpoint=protected_resource_metadata, methods=["GET"]),
         *create_jsonrpc_routes(
             handler,
             rpc_url=DEFAULT_RPC_URL,
@@ -358,4 +400,5 @@ app = Starlette(
 if __name__ == "__main__":
     print(f"A2A agent running on http://localhost:{PORT}")
     print(f"Agent Card: http://localhost:{PORT}{AGENT_CARD_WELL_KNOWN_PATH}")
+    print(f"Protected Resource Metadata: {METADATA_URL}")
     uvicorn.run(app, host="0.0.0.0", port=PORT)
