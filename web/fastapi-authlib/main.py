@@ -1,10 +1,13 @@
 import os
+from html import escape
+from urllib.parse import urlencode, urljoin
+
 import jwt
-from jwt import PyJWKClient
+from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from jwt import PyJWKClient
 from starlette.middleware.sessions import SessionMiddleware
-from authlib.integrations.starlette_client import OAuth
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
@@ -63,33 +66,65 @@ async def home(request: Request):
     if user:
         verified = '<p><strong>Hardware Verified</strong></p>' if user.get('hardware_verified') else ''
         content = f"""
-        <p>Signed in as {user['email']}</p>
+        <p>Signed in as {escape(user['email'])}</p>
         {verified}
+        <ul>
+          <li>email: {escape(user['email'])}</li>
+          <li>email_verified: {user.get('email_verified')}</li>
+          <li>sub: {escape(user['sub'])}</li>
+          <li>amr: {escape(', '.join(user.get('amr') or []) or 'N/A')}</li>
+          <li>acr: {escape(user.get('acr') or 'N/A')}</li>
+          <li>hardware_verified: {user.get('hardware_verified')}</li>
+        </ul>
         <a href="/logout">Sign out</a>
         """
     else:
         content = '<a href="/login">Sign in with Vouch</a>'
     return TEMPLATE.format(content=content)
 
+def redirect_uri(request: Request):
+    return os.environ.get('VOUCH_REDIRECT_URI') or str(request.url_for('callback'))
+
 @app.get('/login')
 async def login(request: Request):
-    redirect_uri = os.environ.get('VOUCH_REDIRECT_URI') or str(request.url_for('callback'))
-    return await oauth.vouch.authorize_redirect(request, redirect_uri)
+    return await oauth.vouch.authorize_redirect(request, redirect_uri(request))
 
 @app.get('/callback')
 async def callback(request: Request):
     token = await oauth.vouch.authorize_access_token(request)
-    userinfo = token.get('userinfo')
+    # Authlib has already verified the ID token; 'userinfo' holds its claims.
+    id_claims = token.get('userinfo')
     at_claims = verify_access_token(token['access_token'])
     request.session['user'] = {
-        'email': userinfo.get('email'),
+        'email': id_claims.get('email'),
+        'email_verified': id_claims.get('email_verified', False),
+        'sub': id_claims.get('sub'),
+        'acr': id_claims.get('acr'),
+        'amr': id_claims.get('amr', []),
         'hardware_verified': at_claims.get('hardware_verified', False),
-        'acr': at_claims.get('acr'),
-        'amr': at_claims.get('amr', []),
     }
+    # Kept for RP-initiated logout: Vouch only honours post_logout_redirect_uri
+    # when a verified id_token_hint identifies the client.
+    request.session['id_token'] = token.get('id_token')
     return RedirectResponse(url='/')
 
 @app.get('/logout')
 async def logout(request: Request):
+    """Sign out locally, then at Vouch (OIDC RP-Initiated Logout 1.0).
+
+    Clearing only the local session leaves the user signed in at Vouch, so the next
+    sign-in would complete silently. Vouch shows a confirmation page and redirects
+    back only when id_token_hint verifies and post_logout_redirect_uri is registered.
+    """
     request.session.pop('user', None)
-    return RedirectResponse(url='/')
+    id_token = request.session.pop('id_token', None)
+    metadata = await oauth.vouch.load_server_metadata()
+    end_session = metadata.get('end_session_endpoint')
+    if not end_session or not id_token:
+        return RedirectResponse(url='/')
+    params = urlencode({
+        'id_token_hint': id_token,
+        'post_logout_redirect_uri': urljoin(redirect_uri(request), '/'),
+        'client_id': VOUCH_CLIENT_ID,
+    })
+    return RedirectResponse(url=f'{end_session}?{params}')
