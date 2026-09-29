@@ -70,6 +70,20 @@ async function fetchUserInfo(accessToken) {
   return response.json();
 }
 
+/**
+ * The OAuth `error` code from a token endpoint error body, or undefined.
+ *
+ * A proxy or load balancer in front of the issuer can answer with an HTML or empty
+ * body, so a failed response is not guaranteed to be JSON.
+ */
+function oauthError(body) {
+  try {
+    return JSON.parse(body)?.error;
+  } catch {
+    return undefined;
+  }
+}
+
 async function deviceFlow() {
   // Step 1: Request device code
   const deviceResponse = await fetch(`${VOUCH_ISSUER}/oauth/device`, {
@@ -136,7 +150,10 @@ async function deviceFlow() {
       return;
     }
 
-    const { error } = await tokenResponse.json();
+    const error = oauthError(await tokenResponse.text());
+    if (!error) {
+      throw new Error(`Token request failed: ${tokenResponse.status}`);
+    }
     switch (error) {
       case 'authorization_pending':
         continue;

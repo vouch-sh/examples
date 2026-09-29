@@ -50,6 +50,19 @@ def fetch_userinfo(access_token):
     return resp.json()
 
 
+def oauth_error(response):
+    """Return the OAuth ``error`` code from a token endpoint error response, or None.
+
+    A proxy or load balancer in front of the issuer can answer with an HTML or empty
+    body, so a failed response is not guaranteed to be JSON.
+    """
+    try:
+        body = response.json()
+    except requests.exceptions.JSONDecodeError:
+        return None
+    return body.get("error") if isinstance(body, dict) else None
+
+
 # Step 1: Request device code
 response = requests.post(
     f"{VOUCH_ISSUER}/oauth/device",
@@ -106,8 +119,11 @@ while True:
 
         break
 
-    error = token_response.json().get("error")
-    if error == "authorization_pending":
+    error = oauth_error(token_response)
+    if error is None:
+        print(f"Token request failed: {token_response.status_code}")
+        sys.exit(1)
+    elif error == "authorization_pending":
         continue
     elif error == "slow_down":
         interval += 5
@@ -118,5 +134,5 @@ while True:
         print("Access denied by user.")
         sys.exit(1)
     else:
-        print(f"Error: {token_response.json()}")
+        print(f"Unexpected error: {error}")
         sys.exit(1)

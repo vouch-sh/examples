@@ -89,16 +89,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
 
     // Step 1: Request device code
-    let device_response: DeviceResponse = client
+    let response = client
         .post(format!("{issuer}/oauth/device"))
         .form(&[
             ("client_id", &client_id),
             ("scope", &"openid email".to_string()),
         ])
         .send()
-        .await?
-        .json()
         .await?;
+    if !response.status().is_success() {
+        eprintln!("Device request failed: {}", response.status().as_u16());
+        std::process::exit(1);
+    }
+    let device_response: DeviceResponse = response.json().await?;
 
     // Step 2: Display instructions to user
     println!("\nTo sign in, visit: {}", device_response.verification_uri);
@@ -163,7 +166,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
 
-        let error: ErrorResponse = response.json().await?;
+        // A proxy or load balancer in front of the issuer can answer with an HTML or empty
+        // body, so a failed response is not guaranteed to be JSON.
+        let status = response.status();
+        let Ok(error) = serde_json::from_str::<ErrorResponse>(&response.text().await?) else {
+            eprintln!("Token request failed: {}", status.as_u16());
+            std::process::exit(1);
+        };
         match error.error.as_str() {
             "authorization_pending" => continue,
             "slow_down" => {
