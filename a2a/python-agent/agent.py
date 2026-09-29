@@ -39,6 +39,9 @@ PORT = int(os.environ.get("PORT", "3000"))
 # and we can prove the token was minted for us specifically.
 RESOURCE = os.environ.get("VOUCH_AUDIENCE", f"http://localhost:{PORT}")
 
+# Vouch only issues these two scopes; anything else is silently dropped.
+SCOPES = ["openid", "email"]
+
 jwks_client = PyJWKClient(f"{VOUCH_ISSUER}/oauth/jwks")
 
 
@@ -110,7 +113,10 @@ agent_card = AgentCard(
     # `url` was replaced by supported_interfaces in v1.0.
     supported_interfaces=[
         AgentInterface(
-            url=f"http://localhost:{PORT}{DEFAULT_RPC_URL}",
+            # VOUCH_AUDIENCE is this agent's public URL, which is where callers reach
+            # the RPC endpoint; the listening port is not, behind a proxy or a
+            # remapped container port.
+            url=f"{RESOURCE.rstrip('/')}{DEFAULT_RPC_URL}",
             protocol_binding="JSONRPC",
         ),
     ],
@@ -136,7 +142,9 @@ agent_card = AgentCard(
             ),
         ),
     },
-    security_requirements=[SecurityRequirement(schemes={"vouch_oidc": {"list": []}})],
+    security_requirements=[
+        SecurityRequirement(schemes={"vouch_oidc": {"list": SCOPES}}),
+    ],
 )
 
 

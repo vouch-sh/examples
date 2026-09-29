@@ -53,9 +53,14 @@ The agent card at `/.well-known/agent-card.json` includes:
       "openIdConnectUrl": "https://us.vouch.sh/.well-known/openid-configuration"
     }
   },
-  "securityRequirements": [{ "schemes": { "vouch_oidc": {} } }]
+  "securityRequirements": [
+    { "schemes": { "vouch_oidc": { "list": ["openid", "email"] } } }
+  ]
 }
 ```
+
+`openid` and `email` are the only scopes Vouch issues. The card's interface URL is
+built from `VOUCH_AUDIENCE`, so it names the address callers actually use.
 
 The card's types are protobuf-backed since a2a-sdk 1.0, so the scheme is emitted in
 its ProtoJSON form. The SDK also flattens `type` and `openIdConnectUrl` alongside it
