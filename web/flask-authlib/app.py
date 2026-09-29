@@ -1,10 +1,12 @@
 import json
 import os
+from urllib.parse import urlencode, urljoin
+
 import jwt
 import requests as http_requests
-from jwt import PyJWKClient
-from flask import Flask, redirect, url_for, session, render_template_string
 from authlib.integrations.flask_client import OAuth
+from flask import Flask, redirect, render_template_string, session, url_for
+from jwt import PyJWKClient
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
@@ -35,6 +37,14 @@ TEMPLATE = """
     {% if user.hardware_verified %}
       <p><strong>Hardware Verified</strong></p>
     {% endif %}
+    <ul>
+      <li>email: {{ user.email }}</li>
+      <li>email_verified: {{ user.email_verified }}</li>
+      <li>sub: {{ user.sub }}</li>
+      <li>amr: {{ user.amr | join(', ') or 'N/A' }}</li>
+      <li>acr: {{ user.acr or 'N/A' }}</li>
+      <li>hardware_verified: {{ user.hardware_verified }}</li>
+    </ul>
     <ul>
       <li><a href="/userinfo">UserInfo</a></li>
       <li><a href="/protected">Protected Route</a></li>
@@ -115,24 +125,32 @@ def home():
     user = session.get('user')
     return render_template_string(TEMPLATE, user=user)
 
+def redirect_uri():
+    return os.environ.get('VOUCH_REDIRECT_URI') or url_for('callback', _external=True)
+
 @app.route('/login')
 def login():
-    redirect_uri = os.environ.get('VOUCH_REDIRECT_URI') or url_for('callback', _external=True)
-    return oauth.vouch.authorize_redirect(redirect_uri)
+    return oauth.vouch.authorize_redirect(redirect_uri())
 
 @app.route('/callback')
 def callback():
     token = oauth.vouch.authorize_access_token()
-    userinfo = token.get('userinfo')
+    # Authlib has already verified the ID token; 'userinfo' holds its claims.
+    id_claims = token.get('userinfo')
     at_claims = verify_access_token(token['access_token'])
     session['user'] = {
-        'email': userinfo.get('email'),
+        'email': id_claims.get('email'),
+        'email_verified': id_claims.get('email_verified', False),
+        'sub': id_claims.get('sub'),
+        'acr': id_claims.get('acr'),
+        'amr': id_claims.get('amr', []),
         'hardware_verified': at_claims.get('hardware_verified', False),
-        'acr': at_claims.get('acr'),
-        'amr': at_claims.get('amr', []),
     }
     session['tokens'] = {
         'access_token': token.get('access_token'),
+        # Kept for RP-initiated logout: Vouch only honours post_logout_redirect_uri
+        # when a verified id_token_hint identifies the client.
+        'id_token': token.get('id_token'),
         'expires_at': token.get('expires_at'),
     }
     return redirect('/')
@@ -170,9 +188,23 @@ def userinfo():
 
 @app.route('/logout')
 def logout():
+    """Sign out locally, then at Vouch (OIDC RP-Initiated Logout 1.0).
+
+    Clearing only the local session leaves the user signed in at Vouch, so the next
+    sign-in would complete silently. Vouch shows a confirmation page and redirects
+    back only when id_token_hint verifies and post_logout_redirect_uri is registered.
+    """
     session.pop('user', None)
-    session.pop('tokens', None)
-    return redirect('/')
+    tokens = session.pop('tokens', None) or {}
+    end_session = oauth.vouch.load_server_metadata().get('end_session_endpoint')
+    if not end_session or not tokens.get('id_token'):
+        return redirect('/')
+    params = urlencode({
+        'id_token_hint': tokens['id_token'],
+        'post_logout_redirect_uri': urljoin(redirect_uri(), '/'),
+        'client_id': VOUCH_CLIENT_ID,
+    })
+    return redirect(f'{end_session}?{params}')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
