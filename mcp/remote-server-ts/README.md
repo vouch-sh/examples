@@ -30,6 +30,15 @@ docker run -p 3000:3000 \
   vouch-mcp-server
 ```
 
+## Test
+
+```bash
+npm ci
+npm test
+```
+
+`server.test.ts` runs offline under `node --test`: it starts a fake Vouch issuer that signs tokens with a local key, launches `server.ts` against it, and checks the metadata document, the 401 challenges, token validation (audience, `typ`, algorithm, `exp`, sender-constrained tokens), DPoP proof checks, and the tools over both 2025-era requests and a 2026-07-28 client. It needs no Vouch account and is not part of CI.
+
 ## Endpoints
 
 | Path | Description |
