@@ -6,7 +6,7 @@ This example demonstrates:
 - **MCP 2026-07-28** — served per request with the v2 TypeScript SDK (`@modelcontextprotocol/server`); 2025-era clients are still answered through the SDK's stateless fallback. There are no `Mcp-Session-Id` sessions: every request is authenticated on its own and tools read the caller's identity from that request's token.
 - **Protected Resource Metadata** ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) — advertises Vouch as the authorization server, and every 401 carries `WWW-Authenticate: Bearer ..., resource_metadata="..."` so clients can find it
 - **Access token validation** — Vouch access tokens are ES256-signed [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) JWTs, verified locally against Vouch's JWKS: `alg` pinned to ES256, `typ: at+jwt`, `iss`, `aud` (this server's resource identifier), and a required `exp`
-- **DPoP** ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)) — accepts `Authorization: DPoP <token>` with a `DPoP` proof and checks the token's `cnf.jkt` against the proof key; a DPoP-bound token sent as a plain Bearer token is rejected
+- **DPoP** ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)) — accepts `Authorization: DPoP <token>` with a `DPoP` proof and checks the token's `cnf.jkt` against the proof key; a DPoP-bound token sent as a plain Bearer token is rejected, as is any certificate-bound (mTLS, `cnf["x5t#S256"]`) token, since this server cannot prove possession of the certificate
 
 The server exposes tools demonstrating identity-aware MCP patterns:
 

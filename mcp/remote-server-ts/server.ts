@@ -77,7 +77,7 @@ interface VouchClaims extends JWTPayload {
   amr?: string[];
   client_id?: string;
   scope?: string;
-  cnf?: { jkt?: string };
+  cnf?: { jkt?: string; 'x5t#S256'?: string };
 }
 
 async function verifyAccessToken(token: string): Promise<AuthInfo> {
@@ -103,6 +103,14 @@ async function verifyAccessToken(token: string): Promise<AuthInfo> {
       throw new OAuthError(OAuthErrorCode.InvalidToken, err.message);
     }
     throw err;
+  }
+  // RFC 8705 §3: this token is bound to a client certificate. Without mutual TLS
+  // there is no certificate to compare against, so possession cannot be proven.
+  if (claims.cnf?.['x5t#S256'] !== undefined) {
+    throw new OAuthError(
+      OAuthErrorCode.InvalidToken,
+      'Certificate-bound (mTLS) tokens are not accepted',
+    );
   }
   return {
     token,
