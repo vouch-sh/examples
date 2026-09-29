@@ -1,5 +1,6 @@
 package sh.vouch.examples;
 
+import java.util.Map;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
@@ -42,6 +43,9 @@ public class DashboardController {
                 authorizedClient.getAccessToken().getTokenValue());
         model.addAttribute("hardwareVerified",
                 Boolean.TRUE.equals(accessToken.getClaim("hardware_verified")));
+        // Thumbprint of the DPoP key the access token is bound to (RFC 9449 section 6).
+        Map<String, Object> cnf = accessToken.getClaimAsMap("cnf");
+        model.addAttribute("cnfJkt", cnf == null ? null : cnf.get("jkt"));
         return "dashboard";
     }
 }

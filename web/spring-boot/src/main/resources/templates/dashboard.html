@@ -12,6 +12,7 @@
     <li>amr: <span th:text="${amr != null ? #strings.listJoin(amr, ', ') : 'N/A'}"></span></li>
     <li>acr: <span th:text="${acr ?: 'N/A'}"></span></li>
     <li>hardware_verified: <span th:text="${hardwareVerified}"></span></li>
+    <li>cnf.jkt: <span th:text="${cnfJkt ?: 'N/A'}"></span></li>
   </ul>
   <form th:action="@{/logout}" method="post">
     <button type="submit">Sign out</button>

@@ -33,7 +33,16 @@ http://localhost:3000/login/oauth2/code/vouch
 
 ## Claims
 
-The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` and `cnf.jkt` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+
+## DPoP
+
+Access tokens are sender-constrained with [DPoP (RFC 9449)](https://www.rfc-editor.org/rfc/rfc9449). Spring Security's OAuth 2.0 client has no client-side DPoP, so `DPoPInterceptor` adds it using the Nimbus OAuth 2.0 SDK that Spring Security already depends on. It holds an ES256 key pair generated at startup and is installed on both the token client and the UserInfo client:
+
+- Token request: adds a DPoP proof. Vouch always answers the first attempt with `use_dpop_nonce` and a `DPoP-Nonce` header, so the interceptor retries once with that nonce.
+- UserInfo request: switches the `Authorization` scheme from `Bearer` to `DPoP` and binds the proof to the token with `ath`. Vouch rejects a DPoP-bound token presented as `Bearer`.
+
+The access token carries `cnf.jkt`, the thumbprint of that key, which the dashboard shows.
 
 ## Sign-out
 
