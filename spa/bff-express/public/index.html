@@ -36,6 +36,19 @@
           app.appendChild(hw);
         }
 
+        if (data.user.acr || data.user.amr.length) {
+          const ul = document.createElement('ul');
+          for (const [name, value] of [['acr', data.user.acr], ['amr', data.user.amr.join(', ')]]) {
+            if (!value) continue;
+            const li = document.createElement('li');
+            const label = document.createElement('strong');
+            label.textContent = name + ':';
+            li.append(label, ' ' + value);
+            ul.appendChild(li);
+          }
+          app.appendChild(ul);
+        }
+
         const userinfoBtn = document.createElement('button');
         userinfoBtn.textContent = 'Fetch UserInfo';
         userinfoBtn.addEventListener('click', fetchUserInfo);
