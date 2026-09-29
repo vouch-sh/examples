@@ -46,7 +46,11 @@ Register this URL as the allowed callback in your OIDC provider configuration.
 
 ## Claims
 
-The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` and `cnf.jkt` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+
+## DPoP
+
+Access tokens are sender-constrained with [DPoP (RFC 9449)](https://www.rfc-editor.org/rfc/rfc9449). The server generates an ES256 key pair at startup and openid-client signs a DPoP proof for the token request and for the UserInfo call, retrying once when Vouch answers `use_dpop_nonce` (its token endpoint always does on the first attempt). The access token then carries `cnf.jkt`, the thumbprint of that key, which the signed-in page shows; it is only usable together with a proof from the same key, and must be sent with the `DPoP` authorization scheme rather than `Bearer`.
 
 ## Advanced Features
 

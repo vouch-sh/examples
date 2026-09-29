@@ -10,6 +10,13 @@ const callbackUrl = process.env.VOUCH_REDIRECT_URI || 'http://localhost:3000/aut
 
 const config = await client.discovery(new URL(issuer), clientId, clientSecret);
 
+// DPoP (RFC 9449) binds the access token to a key this server holds, so a leaked
+// token is useless without the private key. The key pair lives for the process: the
+// confidential client, not the browser, is what holds the token. openid-client signs
+// a proof per request and retries once when Vouch answers use_dpop_nonce, which
+// Vouch's token endpoint always does on the first attempt.
+const dpop = client.getDPoPHandle(config, await client.randomDPoPKeyPair('ES256'));
+
 const app = express();
 
 // No fallback: a default secret baked into the source lets anyone forge session
@@ -80,6 +87,7 @@ app.get('/', (req, res) => {
           <li>amr: ${escapeHtml(user.amr.join(', ') || 'N/A')}</li>
           <li>acr: ${escapeHtml(user.acr || 'N/A')}</li>
           <li>hardware_verified: ${user.hardwareVerified}</li>
+          <li>cnf.jkt: ${escapeHtml(user.cnfJkt || 'N/A')}</li>
         </ul>
         <ul>
           <li><a href="/userinfo">UserInfo</a></li>
@@ -130,11 +138,17 @@ app.get('/auth/vouch/callback', async (req, res) => {
     delete req.session.oidc;
 
     const currentUrl = new URL(req.url, `http://${req.headers.host}`);
-    const tokens = await client.authorizationCodeGrant(config, currentUrl, {
-      pkceCodeVerifier: codeVerifier,
-      expectedState: state,
-      expectedNonce: nonce,
-    });
+    const tokens = await client.authorizationCodeGrant(
+      config,
+      currentUrl,
+      {
+        pkceCodeVerifier: codeVerifier,
+        expectedState: state,
+        expectedNonce: nonce,
+      },
+      undefined,
+      { DPoP: dpop },
+    );
 
     const claims = tokens.claims();
     const atClaims = await verifyAccessToken(tokens.access_token);
@@ -145,6 +159,8 @@ app.get('/auth/vouch/callback', async (req, res) => {
       acr: claims.acr || null,
       amr: claims.amr || [],
       hardwareVerified: atClaims.hardware_verified || false,
+      // Thumbprint of the DPoP key the access token is bound to (RFC 9449 section 6).
+      cnfJkt: atClaims.cnf?.jkt || null,
     };
 
     req.session.tokens = {
@@ -200,14 +216,11 @@ app.get('/protected', requireAuth, (req, res) => {
 app.get('/userinfo', requireAuth, async (req, res) => {
   try {
     const { accessToken } = req.session.tokens;
-    const response = await fetch(config.serverMetadata().userinfo_endpoint, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    // A DPoP-bound token must be presented with the DPoP scheme and a fresh proof;
+    // Vouch rejects it as a plain Bearer token.
+    const userinfo = await client.fetchUserInfo(config, accessToken, req.session.user.id, {
+      DPoP: dpop,
     });
-    if (!response.ok) {
-      res.status(response.status).send(`UserInfo request failed: ${response.status}`);
-      return;
-    }
-    const userinfo = await response.json();
     res.send(`
       <!DOCTYPE html>
       <html>
