@@ -63,6 +63,9 @@
       {#if atClaims.amr}
         <li><strong>amr:</strong> {atClaims.amr.join(', ')}</li>
       {/if}
+      {#if atClaims.cnf?.jkt}
+        <li><strong>DPoP-bound (cnf.jkt):</strong> {atClaims.cnf.jkt}</li>
+      {/if}
     </ul>
   </div>
   <div style="margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px">

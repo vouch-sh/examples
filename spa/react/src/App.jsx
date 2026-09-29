@@ -59,6 +59,7 @@ function UserProfile({ auth }) {
         <li><strong>hardware_verified:</strong> {String(atClaims.hardware_verified || false)}</li>
         {atClaims.acr && <li><strong>acr:</strong> {atClaims.acr}</li>}
         {atClaims.amr && <li><strong>amr:</strong> {atClaims.amr.join(', ')}</li>}
+        {atClaims.cnf?.jkt && <li><strong>DPoP-bound (cnf.jkt):</strong> {atClaims.cnf.jkt}</li>}
       </ul>
     </div>
   );

@@ -35,3 +35,15 @@ http://localhost:3000
 Vouch compares post-logout redirect URIs as exact strings: `localhost` and
 `127.0.0.1` are different URIs, and the port must match. If the URI is not
 registered, sign-out still works but finishes on Vouch's own signed-out page.
+
+## DPoP
+
+Tokens are sender-constrained with DPoP ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449))
+using oidc-client-ts's built-in support. A non-extractable P-256 key kept in IndexedDB
+signs a proof for the token request, and the authorization code is bound to the same
+key (`dpop_jkt`). Vouch always asks for a server nonce at the token endpoint; the
+library retries once with the `DPoP-Nonce` Vouch returns. The page shows the key
+thumbprint from the access token's `cnf.jkt`.
+
+A resource server receiving this token must accept it under the `DPoP` scheme with a
+proof, not as `Bearer`.

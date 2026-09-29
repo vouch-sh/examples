@@ -96,6 +96,11 @@ for (const example of SPA_EXAMPLES) {
         timeout: 10_000,
       });
 
+      // The access token carries cnf.jkt only when the DPoP proof was accepted.
+      if (example.dpopBound) {
+        await expect(page.locator("body")).toContainText("DPoP-bound (cnf.jkt)");
+      }
+
       await context.close();
     });
 

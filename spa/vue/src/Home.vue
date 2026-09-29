@@ -57,6 +57,7 @@ onUnmounted(() => {
         <li><strong>hardware_verified:</strong> {{ String(atClaims.hardware_verified || false) }}</li>
         <li v-if="atClaims.acr"><strong>acr:</strong> {{ atClaims.acr }}</li>
         <li v-if="atClaims.amr"><strong>amr:</strong> {{ atClaims.amr.join(', ') }}</li>
+        <li v-if="atClaims.cnf?.jkt"><strong>DPoP-bound (cnf.jkt):</strong> {{ atClaims.cnf.jkt }}</li>
       </ul>
     </div>
     <div style="margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px">

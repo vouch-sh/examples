@@ -130,7 +130,7 @@ const WEB_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string, dpopBound?: boolean }>} */
 const SPA_EXAMPLES = [
   {
     name: "react",
@@ -139,6 +139,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "vue",
@@ -147,6 +148,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "angular",
@@ -163,6 +165,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "vanilla-js",
@@ -171,6 +174,7 @@ const SPA_EXAMPLES = [
     loginSelector: "button#login-btn",
     logoutSelector: "button#logout-btn",
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
 ];
 
