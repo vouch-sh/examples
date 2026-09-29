@@ -25,7 +25,7 @@ export default NextAuth({
     clientId: process.env.VOUCH_CLIENT_ID,
     clientSecret: process.env.VOUCH_CLIENT_SECRET,
     authorization: { params: { scope: 'openid email' } },
-    checks: ['pkce', 'state'],
+    checks: ['pkce', 'state', 'nonce'],
     idToken: true,
     profile(profile) {
       return {
