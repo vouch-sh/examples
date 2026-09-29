@@ -1,0 +1,19 @@
+[package]
+name = "httpsig-check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Standalone: not part of any workspace.
+[workspace]
+
+[dependencies]
+# Replaced with $VOUCH_SRC/crates/vouch-httpsig by test_httpsig.py; this
+# default assumes the Vouch repository is checked out next to this one.
+vouch-httpsig = { path = "../../../vouch/crates/vouch-httpsig", features = ["axum"] }
+axum = { version = "=0.8.9", default-features = false, features = ["tokio", "matched-path", "http1"] }
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread"] }
+tower = { version = "=0.5.3", features = ["util"] }
+http = "=1.5.0"
+serde_json = "1"
+base64 = "0.22"

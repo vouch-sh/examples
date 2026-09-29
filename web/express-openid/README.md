@@ -13,6 +13,7 @@ This example demonstrates how to integrate Vouch OIDC authentication into an Exp
 | `VOUCH_ISSUER` | OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | OAuth client secret |
+| `SECRET_KEY` | Session cookie signing secret. Required; generate one with `openssl rand -hex 32` |
 | `VOUCH_REDIRECT_URI` | OAuth redirect URI (default: `http://localhost:3000/auth/vouch/callback`) |
 
 ## Docker
@@ -30,6 +31,7 @@ docker run -p 3000:3000 \
   -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
+  -e SECRET_KEY="$(openssl rand -hex 32)" \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/auth/vouch/callback \
   vouch-express-openid
 ```
@@ -42,6 +44,14 @@ http://localhost:3000/auth/vouch/callback
 
 Register this URL as the allowed callback in your OIDC provider configuration.
 
+## Claims
+
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` and `cnf.jkt` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+
+## DPoP
+
+Access tokens are sender-constrained with [DPoP (RFC 9449)](https://www.rfc-editor.org/rfc/rfc9449). Each sign-in gets its own ES256 key pair, kept in the server-side session. Its thumbprint goes on the authorization request as `dpop_jkt`, so Vouch will only redeem the code with a proof from that key, and openid-client signs a DPoP proof for the token request and for the UserInfo call, retrying once when Vouch answers `use_dpop_nonce` (its token endpoint always does on the first attempt). The access token then carries `cnf.jkt`, the thumbprint of that key; the app refuses a token not bound to it, and the signed-in page shows it; it is only usable together with a proof from the same key, and must be sent with the `DPoP` authorization scheme rather than `Bearer`.
+
 ## Advanced Features
 
 This example demonstrates several post-login patterns:
@@ -52,22 +62,17 @@ This example demonstrates several post-login patterns:
 
 ## Sign-out
 
-Sign-out is a two-step operation, because neither endpoint alone is sufficient.
-
 **RP-Initiated Logout** (`end_session_endpoint`) ends the Vouch *browser* session.
 The app redirects to `/oauth/logout` with `id_token_hint` and
 `post_logout_redirect_uri`. Vouch shows a confirmation page and only redirects back
 when the hint verifies **and** the URI is registered on the client — otherwise it
 finishes on its own signed-out page rather than following an unvalidated URI.
+The post-logout redirect URI the app sends is the origin of `VOUCH_REDIRECT_URI` followed by `/`. Register it exactly, including the trailing slash:
 
-**Token revocation** ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009)) is still
-needed, because RP-initiated logout deletes only the browser session — the access
-token this app holds stays valid at Vouch and at every resource server until it
-expires.
+```
+http://localhost:3000/
+```
 
-> [!WARNING]
-> Vouch revokes **by user, not by token**. One revocation call signs the user out of
-> every device and every other application, including the Vouch CLI. That is
-> deliberate for a hardware-attested identity provider — "human presence attestation
-> means logout = full logout" — but it is broader than RFC 7009 describes, and it
-> will surprise you if you expect token-scoped revocation.
+The access token is not revoked. Vouch revokes **by user, not by token**, so a single
+revocation call would sign the user out of every device and every other application,
+including the Vouch CLI.

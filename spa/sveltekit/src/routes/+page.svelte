@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getUser, login, logout } from '$lib/auth';
+  import { userManager, getUser, login, logout } from '$lib/auth';
 
   // Display only -- never an authorization decision.
   //
@@ -16,13 +16,26 @@
 
   let user = $state(null);
   let loading = $state(true);
-  let hardwareVerified = $derived(
-    user?.access_token ? decodeUnverifiedForDisplay(user.access_token).hardware_verified || false : false
-  );
+  let atClaims = $derived(user?.access_token ? decodeUnverifiedForDisplay(user.access_token) : {});
+  let now = $state(Math.floor(Date.now() / 1000));
+  let timeLeft = $derived(Math.max((user?.expires_at ?? 0) - now, 0));
 
-  onMount(async () => {
-    user = await getUser();
-    loading = false;
+  onMount(() => {
+    const unsubscribe = userManager.events.addAccessTokenExpired(async () => {
+      await userManager.removeUser();
+      user = null;
+    });
+    const timer = setInterval(() => {
+      now = Math.floor(Date.now() / 1000);
+    }, 1000);
+    getUser().then((u) => {
+      user = u;
+      loading = false;
+    });
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   });
 </script>
 
@@ -32,10 +45,36 @@
   <p>Loading...</p>
 {:else if user}
   <p>Signed in as {user.profile.email}</p>
-  {#if hardwareVerified}
+  {#if atClaims.hardware_verified}
     <p><strong>Hardware Verified</strong></p>
   {/if}
-  <button onclick={logout}>Sign out</button>
+  <div style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 4px">
+    <h3>Profile Claims</h3>
+    <ul style="list-style: none; padding: 0">
+      <li><strong>sub:</strong> {user.profile.sub}</li>
+      <li><strong>email:</strong> {user.profile.email}</li>
+      {#if user.profile.email_verified !== undefined}
+        <li><strong>email_verified:</strong> {String(user.profile.email_verified)}</li>
+      {/if}
+      <li><strong>hardware_verified:</strong> {String(atClaims.hardware_verified || false)}</li>
+      {#if atClaims.acr}
+        <li><strong>acr:</strong> {atClaims.acr}</li>
+      {/if}
+      {#if atClaims.amr}
+        <li><strong>amr:</strong> {atClaims.amr.join(', ')}</li>
+      {/if}
+      {#if atClaims.cnf?.jkt}
+        <li><strong>DPoP-bound (cnf.jkt):</strong> {atClaims.cnf.jkt}</li>
+      {/if}
+    </ul>
+  </div>
+  <div style="margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px">
+    <h3>Token Info</h3>
+    <p>Token expires in: <strong>{timeLeft}s</strong></p>
+  </div>
+  <div style="margin-top: 1rem">
+    <button onclick={logout}>Sign out</button>
+  </div>
 {:else}
   <button onclick={login}>Sign in with Vouch</button>
 {/if}

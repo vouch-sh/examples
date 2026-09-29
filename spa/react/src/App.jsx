@@ -59,6 +59,7 @@ function UserProfile({ auth }) {
         <li><strong>hardware_verified:</strong> {String(atClaims.hardware_verified || false)}</li>
         {atClaims.acr && <li><strong>acr:</strong> {atClaims.acr}</li>}
         {atClaims.amr && <li><strong>amr:</strong> {atClaims.amr.join(', ')}</li>}
+        {atClaims.cnf?.jkt && <li><strong>DPoP-bound (cnf.jkt):</strong> {atClaims.cnf.jkt}</li>}
       </ul>
     </div>
   );
@@ -66,6 +67,10 @@ function UserProfile({ auth }) {
 
 export default function App() {
   const auth = useAuth();
+
+  // isAuthenticated is only computed when the user loads, so drop the user when the
+  // token expires rather than keep showing "Signed in" with a dead token.
+  useEffect(() => auth.events.addAccessTokenExpired(() => auth.removeUser()), [auth.events, auth.removeUser]);
 
   if (auth.isLoading) {
     return (
@@ -88,7 +93,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'system-ui', padding: '2rem' }}>
       <h1>Vouch OIDC + React SPA</h1>
-      {auth.isAuthenticated ? (
+      {auth.isAuthenticated && !auth.user?.expired ? (
         <div>
           <p>Signed in as {auth.user?.profile.email}</p>
           {auth.user?.access_token && decodeUnverifiedForDisplay(auth.user.access_token).hardware_verified && (

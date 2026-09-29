@@ -12,10 +12,11 @@ Examples are organized by client type:
 
 - **`web/`** — Server-side apps (confidential clients, Authorization Code flow with client secret). 11 examples across Node.js, Python, Ruby, PHP, Java, Go, Rust, C#.
 - **`spa/`** — Browser-based apps. 6 examples: React, Vue, Angular, SvelteKit, Vanilla JS (all public clients using PKCE), plus `bff-express` — a Backend-for-Frontend that is a **confidential** client and does require `VOUCH_CLIENT_SECRET`.
-- **`native/`** — CLI/terminal apps (public clients, Device Authorization Grant / RFC 8628). 6 examples: Node.js, Python, Rust, plus three Python credential-brokering agents (`python-agent-aws`, `python-agent-github`, `python-agent-multi`).
-- **`mcp/`** — Model Context Protocol servers with bearer token auth + RFC 9728 Protected Resource Metadata. 3 examples: `remote-server-ts`, `remote-server-py`, `credential-broker`.
+- **`native/`** — CLI/terminal apps (Device Authorization Grant / RFC 8628). 6 examples: Node.js, Python, Rust (public clients), plus three Python credential-brokering agents (`python-agent-aws`, `python-agent-github`, `python-agent-multi`) that register their own `private_key_jwt` + DPoP client via RFC 7591 and take no `VOUCH_CLIENT_ID`, because Vouch's `/v1/credentials/*` endpoints require an RFC 9421 signature with a key from the client's JWKS.
+- **`mcp/`** — Model Context Protocol servers with bearer token auth + RFC 9728 Protected Resource Metadata. 3 examples: `remote-server-ts`, `remote-server-py`, `credential-broker` (which also registers its own client and uses RFC 8693 token exchange).
 - **`a2a/`** — Agent-to-Agent protocol with OIDC security scheme in the Agent Card. Python.
 - **`tests/`** — Playwright end-to-end suite (not an example). Driven by the root `Makefile`.
+- **`offline-tests/`** — pytest + Rust protocol tests for the credential-brokering examples against a fake Vouch and vouch-httpsig (not an example, not in CI). See its README.
 
 27 examples total.
 
@@ -34,7 +35,7 @@ docker run -p 3000:3000 \
   vouch-example
 ```
 
-SPA examples omit `VOUCH_CLIENT_SECRET`. Native examples omit both `VOUCH_CLIENT_SECRET` and `VOUCH_REDIRECT_URI`.
+SPA examples omit `VOUCH_CLIENT_SECRET`. Native examples omit both `VOUCH_CLIENT_SECRET` and `VOUCH_REDIRECT_URI`. Server-side examples with a session also need their session secret (see Environment Variables) and refuse to start without it; each example's README lists exactly what it takes.
 
 ## CI
 
@@ -47,7 +48,7 @@ docker build -t my-example web/express-openid
 scripts/smoke.sh web/express-openid my-example
 ```
 
-It uses throwaway credentials and needs no Vouch account. Probes are chosen per category: web apps must render `/`; static SPAs must render `/` **and** have their `__VOUCH_*` placeholders substituted into the built bundle (`entrypoint.sh` exits 0 even when its `sed` glob matches nothing, so this is the only thing catching a bundler output-layout change); MCP and A2A servers must serve their well-known metadata and reject unauthenticated calls with 401; native CLIs must get past module loading.
+It uses throwaway credentials and needs no Vouch account. Probes are chosen per category: web apps must render `/`; static SPAs must render `/` **and** have their `__VOUCH_*` placeholders substituted into the built bundle (`entrypoint.sh` exits 0 even when its `sed` glob matches nothing, so this is the only thing catching a bundler output-layout change); MCP and A2A servers must serve their well-known metadata and reject unauthenticated calls with 401; native CLIs must get past module loading (the `python-agent-*` ones are only imported, with no network, so smoke never registers a client).
 
 A Playwright end-to-end suite lives in `tests/` (specs for web, spa, native, mcp, a2a, claims) and is driven by the root `Makefile` (`make test`, `make test-mcp`, …). It is **not** wired into CI: it shells out to the macOS Keychain for a DPoP signing key, needs a live hardware-key-backed Vouch session, and creates/destroys real OAuth applications. Run it locally before merging anything non-trivial.
 
@@ -73,9 +74,13 @@ Credentials come from the Vouch CLI's XDG locations — `$XDG_CONFIG_HOME/vouch/
 | Variable | Used By | Description |
 |----------|---------|-------------|
 | `VOUCH_ISSUER` | All | OIDC issuer URL (default: `https://us.vouch.sh`) |
-| `VOUCH_CLIENT_ID` | All | OAuth client ID |
+| `VOUCH_CLIENT_ID` | All except the self-registering `native/python-agent-*` and `mcp/credential-broker` | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Web only | OAuth client secret |
-| `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL |
+| `VOUCH_REDIRECT_URI` | Web + SPA | OAuth callback URL. Its origin plus `/` is also the post-logout redirect URI, which must be registered exactly |
+| `SECRET_KEY` | `express-openid`, `flask-authlib`, `fastapi-authlib`, `django-allauth`, `spa/bff-express` | Session secret; required, no default |
+| `NEXTAUTH_SECRET` / `APP_KEY` / `SECRET_KEY_BASE` | `nextjs-nextauth` / `laravel-socialite` / `rails-omniauth` | Framework session secret; required, no default |
+| `VOUCH_AUDIENCE` | MCP + A2A | Public URL of the server; its WHATWG-normalised form (trailing `/`) is the RFC 9728 `resource` and the required `aud` |
+| `AWS_REGION` | `python-agent-aws`, `python-agent-multi`, `mcp/credential-broker` | Region for the regional STS endpoint |
 
 ## Dependency Management
 
@@ -93,5 +98,7 @@ Credentials come from the Vouch CLI's XDG locations — `$XDG_CONFIG_HOME/vouch/
 | Composer | `composer.json` → `composer.lock` | `docker run --rm -v "$PWD":/app -w /app composer:2.9 composer update --no-install` | `composer install --no-dev` |
 | NuGet | `*.csproj` → `packages.lock.json` | `dotnet restore --use-lock-file` | `dotnet restore --locked-mode` |
 | Maven | `pom.xml` (BOM-pinned) | — | `mvn package` |
+
+The regenerate commands keep existing pins and only resolve what changed. To move every dependency to its latest allowed version, add `--upgrade` to the `uv pip compile` command, and run `npm update --package-lock-only` instead of `npm install --package-lock-only`.
 
 `--universal` on the Python compile is required, not optional: development is arm64 macOS and CI builds linux/amd64, so a platform-specific resolution would pin wheels that don't exist on the other architecture.

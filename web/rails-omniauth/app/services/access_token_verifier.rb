@@ -39,9 +39,11 @@ module AccessTokenVerifier
     private
 
     # Refetched per call to keep the example short. A real app should cache this and
-    # only refetch when it encounters an unknown `kid`.
+    # only refetch when it encounters an unknown `kid`. The location comes from
+    # discovery rather than being assumed from the issuer's URL layout.
     def jwks
-      JSON::JWK::Set.new(JSON.parse(Net::HTTP.get(URI("#{ISSUER}/oauth/jwks"))))
+      jwks_uri = OpenIDConnect::Discovery::Provider::Config.discover!(ISSUER).jwks_uri
+      JSON::JWK::Set.new(JSON.parse(Net::HTTP.get(URI(jwks_uri))))
     end
   end
 end

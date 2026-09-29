@@ -21,14 +21,22 @@ application of the matching type.
 |----------|------------------|-----------------------|--------|
 | [`web/`](web), [`spa/bff-express`](spa/bff-express) | Web | Client secret | Authorization code |
 | [`spa/`](spa) (all others) | SPA | None (PKCE) | Authorization code |
-| [`native/`](native) | Native | None (PKCE) | Authorization code, device authorization ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) |
+| [`native/node`](native/node), [`native/python`](native/python), [`native/rust`](native/rust) | Native | None (PKCE) | Authorization code, device authorization ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) |
+| [`native/python-agent-*`](native) | None to create: registers itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)) | `private_key_jwt` + DPoP | Device authorization |
+| [`mcp/credential-broker`](mcp/credential-broker) | None to create: registers itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)) | `private_key_jwt` + DPoP | Token exchange ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693)) |
 
 > [!IMPORTANT]
-> Native is the only type authorized for the device authorization grant. A CLI example pointed at
-> a Web or SPA application is refused at `/oauth/device` with `unauthorized_client`.
+> Of the dashboard application types, Native is the only one authorized for the device
+> authorization grant. A CLI example pointed at a Web or SPA application is refused at
+> `/oauth/device` with `unauthorized_client`.
 
-The MCP and A2A examples are resource servers, not OAuth clients: they validate the tokens Vouch
-issued to their callers and register no application of their own.
+The credential-brokering examples register their own client because Vouch's `/v1/credentials/*`
+endpoints require an [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP Message Signature
+made with a key from the JWKS of the client that holds the access token, and dashboard-created
+Native applications have no JWKS.
+
+The other MCP examples and the A2A example are resource servers, not OAuth clients: they validate
+the tokens Vouch issued to their callers and register no application of their own.
 
 ## Structure
 
@@ -60,7 +68,7 @@ Browser-based applications. The first five are public clients using PKCE with no
 | Vue + oidc-client-ts | [`spa/vue`](spa/vue) | JavaScript |
 | Vanilla JS + oidc-client-ts | [`spa/vanilla-js`](spa/vanilla-js) | JavaScript |
 | SvelteKit + oidc-client-ts | [`spa/sveltekit`](spa/sveltekit) | JavaScript |
-| Angular + angular-auth-oidc-client | [`spa/angular`](spa/angular) | TypeScript |
+| Angular + oidc-client-ts | [`spa/angular`](spa/angular) | TypeScript |
 | BFF + Express (recommended) | [`spa/bff-express`](spa/bff-express) | Node.js |
 
 > [!IMPORTANT]
@@ -68,9 +76,11 @@ Browser-based applications. The first five are public clients using PKCE with no
 > requires `VOUCH_CLIENT_SECRET`. Tokens stay on the server and the browser only ever receives an
 > HttpOnly session cookie.
 
-### Native & CLI Applications (Public Clients)
+### Native & CLI Applications
 
-Terminal tools and headless servers using the Device Authorization Grant (RFC 8628).
+Terminal tools and headless servers using the Device Authorization Grant (RFC 8628). The Node.js,
+Python and Rust examples are public clients; the three Python agents register their own
+`private_key_jwt` client so they can sign credential-brokering requests.
 
 | Framework | Directory | Language |
 |-----------|-----------|----------|
@@ -87,7 +97,7 @@ Secure AI agent communication using Vouch for hardware-backed authentication.
 
 | Protocol | Directory | Description |
 |----------|-----------|-------------|
-| MCP Remote Server (TypeScript) | [`mcp/remote-server-ts`](mcp/remote-server-ts) | [Model Context Protocol](https://modelcontextprotocol.io/) server with Bearer auth + Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) |
+| MCP Remote Server (TypeScript) | [`mcp/remote-server-ts`](mcp/remote-server-ts) | [Model Context Protocol](https://modelcontextprotocol.io/) server (2026-07-28) with Bearer + DPoP auth and Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) |
 | MCP Remote Server (Python) | [`mcp/remote-server-py`](mcp/remote-server-py) | Same as above, in Python with FastMCP |
 | MCP Credential Broker (Python) | [`mcp/credential-broker`](mcp/credential-broker) | MCP server that brokers AWS, GitHub, and SSH credentials on behalf of the authenticated user |
 | A2A Agent (Python) | [`a2a/python-agent`](a2a/python-agent) | [Agent-to-Agent](https://github.com/a2aproject/A2A) agent with OpenID Connect security scheme in the Agent Card |
@@ -114,7 +124,8 @@ docker run -p 3000:3000 \
 > [!NOTE]
 > SPA examples do not require `VOUCH_CLIENT_SECRET`, except [`spa/bff-express`](spa/bff-express),
 > which is a confidential client. Native/CLI examples do not require `VOUCH_REDIRECT_URI` or
-> `VOUCH_CLIENT_SECRET`.
+> `VOUCH_CLIENT_SECRET`. The `native/python-agent-*` examples and `mcp/credential-broker` take no
+> `VOUCH_CLIENT_ID` either; they register their own client and keep it under `XDG_STATE_HOME`.
 
 ## Environment Variables
 
@@ -146,7 +157,9 @@ Several examples go beyond basic login to demonstrate real-world OIDC patterns:
 |---------|----------|
 | Hardware key enforcement | [`web/express-openid`](web/express-openid) (`/protected`), [`web/flask-authlib`](web/flask-authlib) (`/protected`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`sensitive-action` tool) |
 | UserInfo endpoint calls | [`web/express-openid`](web/express-openid), [`web/flask-authlib`](web/flask-authlib), [`native/node`](native/node), [`native/python`](native/python) |
-| Token introspection | [`web/express-openid`](web/express-openid) (`/introspect`), [`mcp/remote-server-ts`](mcp/remote-server-ts) (`introspect-token` tool) |
+| Token introspection | [`web/express-openid`](web/express-openid) (`/introspect`) |
+| Local access token (RFC 9068 JWT) validation | [`mcp/remote-server-ts`](mcp/remote-server-ts) (`token-claims` tool) |
+| DPoP-bound access tokens (resource server) | [`mcp/remote-server-ts`](mcp/remote-server-ts) |
 | Post-auth API calls | [`native/node`](native/node), [`native/python`](native/python) |
 | Token expiry display | [`spa/react`](spa/react) |
 | Profile claims display | [`spa/react`](spa/react) |

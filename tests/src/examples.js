@@ -4,7 +4,7 @@
  * app type, login/logout selectors, and callback path.
  */
 
-/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean, dpopBound?: boolean, userinfoSelector?: string, userinfoOutput?: string }>} */
 const WEB_EXAMPLES = [
   {
     name: "express-openid",
@@ -17,6 +17,7 @@ const WEB_EXAMPLES = [
     // Signs out at Vouch too, so logout goes via the end_session endpoint and
     // stops on Vouch's confirmation page before returning here.
     rpInitiatedLogout: true,
+    dpopBound: true,
   },
   {
     name: "nextjs-nextauth",
@@ -25,7 +26,8 @@ const WEB_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     callbackPath: "/api/auth/callback/vouch",
-    logoutMethod: "signOut()",
+    logoutMethod: "fetch(/api/logout) + signOut({ redirect: false })",
+    rpInitiatedLogout: true,
     // NextAuth constructs callback URL from NEXTAUTH_URL, not VOUCH_REDIRECT_URI
     extraEnv: (baseUrl) => ({
       NEXTAUTH_URL: baseUrl,
@@ -40,6 +42,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action*="logout"] button',
     callbackPath: "/accounts/oidc/vouch/login/callback/",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
     // django-allauth shows a "Sign In Via Vouch" confirmation page before redirecting
     preAuthorizeSelector: 'button:has-text("Continue")',
   },
@@ -51,6 +54,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "flask-authlib",
@@ -60,6 +64,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "laravel-socialite",
@@ -69,6 +74,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action="/logout"] button',
     callbackPath: "/auth/callback",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
   },
   {
     name: "rails-omniauth",
@@ -78,6 +84,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form button:has-text("Sign out")',
     callbackPath: "/auth/vouch/callback",
     logoutMethod: "DELETE",
+    rpInitiatedLogout: true,
   },
   {
     name: "spring-boot",
@@ -87,6 +94,8 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action*="logout"] button',
     callbackPath: "/login/oauth2/code/vouch",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
+    dpopBound: true,
   },
   {
     name: "go-oidc",
@@ -96,6 +105,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "axum-openidconnect",
@@ -105,6 +115,7 @@ const WEB_EXAMPLES = [
     logoutSelector: 'a[href="/logout"]',
     callbackPath: "/callback",
     logoutMethod: "GET",
+    rpInitiatedLogout: true,
   },
   {
     name: "aspnet-core",
@@ -114,20 +125,26 @@ const WEB_EXAMPLES = [
     logoutSelector: 'form[action="/logout"] button',
     callbackPath: "/callback",
     logoutMethod: "POST",
+    rpInitiatedLogout: true,
+    dpopBound: true,
   },
   {
     name: "bff-express",
     dir: "spa/bff-express",
     type: "web",
     loginSelector: 'a[href="/auth/login"]',
-    logoutSelector: 'a[href="/auth/logout"]',
+    logoutSelector: 'form[action="/auth/logout"] button',
     callbackPath: "/auth/callback",
-    logoutMethod: "GET",
+    logoutMethod: "POST",
     rpInitiatedLogout: true,
+    dpopBound: true,
+    // UserInfo is fetched over DPoP, so exercising it proves the proof is accepted
+    userinfoSelector: 'button:has-text("Fetch UserInfo")',
+    userinfoOutput: "#userinfo-output",
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string }>} */
+/** @type {Array<{ name: string, dir: string, type: "spa", loginSelector: string, logoutSelector: string, logoutMethod: string, dpopBound?: boolean }>} */
 const SPA_EXAMPLES = [
   {
     name: "react",
@@ -135,7 +152,8 @@ const SPA_EXAMPLES = [
     type: "spa",
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
-    logoutMethod: "removeUser()",
+    logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "vue",
@@ -144,6 +162,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "angular",
@@ -151,7 +170,8 @@ const SPA_EXAMPLES = [
     type: "spa",
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
-    logoutMethod: "logoff()",
+    logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "sveltekit",
@@ -160,6 +180,7 @@ const SPA_EXAMPLES = [
     loginSelector: 'button:has-text("Sign in with Vouch")',
     logoutSelector: 'button:has-text("Sign out")',
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
   {
     name: "vanilla-js",
@@ -168,18 +189,21 @@ const SPA_EXAMPLES = [
     loginSelector: "button#login-btn",
     logoutSelector: "button#logout-btn",
     logoutMethod: "signoutRedirect()",
+    dpopBound: true,
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], extraEnv?: Record<string, string> }>} */
+/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], showsVerificationUriComplete?: boolean, extraEnv?: Record<string, string>, dynamicRegistration?: string }>} */
 const NATIVE_EXAMPLES = [
   {
     name: "native-node",
     dir: "native/node",
     type: "native",
+    showsVerificationUriComplete: true,
     stdoutMarkers: [
       "To sign in, visit:",
       "Enter code:",
+      "Or open:",
       "Authenticated!",
       "Email:",
     ],
@@ -188,9 +212,11 @@ const NATIVE_EXAMPLES = [
     name: "native-python",
     dir: "native/python",
     type: "native",
+    showsVerificationUriComplete: true,
     stdoutMarkers: [
       "To sign in, visit:",
       "Enter code:",
+      "Or open:",
       "Authenticated!",
       "Email:",
     ],
@@ -199,9 +225,11 @@ const NATIVE_EXAMPLES = [
     name: "native-rust",
     dir: "native/rust",
     type: "native",
+    showsVerificationUriComplete: true,
     stdoutMarkers: [
       "To sign in, visit:",
       "Enter code:",
+      "Or open:",
       "Authenticated!",
       "Email:",
     ],
@@ -214,9 +242,14 @@ const NATIVE_EXAMPLES = [
       "To sign in, visit:",
       "Enter code:",
     ],
-    // AWS_ROLE_ARN is required at startup; dummy value is fine since
-    // the device flow can't complete in automated tests anyway.
-    extraEnv: { AWS_ROLE_ARN: "arn:aws:iam::000000000000:role/test" },
+    // AWS_ROLE_ARN and AWS_REGION are required at startup; dummy values are
+    // fine since the device flow can't complete in automated tests anyway.
+    extraEnv: {
+      AWS_ROLE_ARN: "arn:aws:iam::000000000000:role/test",
+      AWS_REGION: "us-east-1",
+    },
+    // Registers its own client (RFC 7591) and saves it here inside the container.
+    dynamicRegistration: "/state/vouch-python-agent-aws/client.json",
   },
   {
     name: "native-python-agent-github",
@@ -226,6 +259,7 @@ const NATIVE_EXAMPLES = [
       "To sign in, visit:",
       "Enter code:",
     ],
+    dynamicRegistration: "/state/vouch-python-agent-github/client.json",
   },
   {
     name: "native-python-agent-multi",
@@ -235,27 +269,39 @@ const NATIVE_EXAMPLES = [
       "To sign in, visit:",
       "Enter code:",
     ],
+    dynamicRegistration: "/state/vouch-python-agent-multi/client.json",
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean }>} */
+/**
+ * `dpop` marks servers that accept RFC 9449 DPoP-bound tokens (`Authorization: DPoP`
+ * plus a proof) and challenge with both Bearer and DPoP.
+ *
+ * @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean, dpop?: boolean, dynamicRegistration?: string }>}
+ */
 const MCP_EXAMPLES = [
   {
     name: "mcp-remote-server-ts",
     dir: "mcp/remote-server-ts",
     type: "mcp",
     hasWhoami: true,
+    dpop: true,
   },
   {
     name: "mcp-remote-server-py",
     dir: "mcp/remote-server-py",
     type: "mcp",
     hasWhoami: true,
+    dpop: true,
   },
   {
     name: "mcp-credential-broker",
     dir: "mcp/credential-broker",
     type: "mcp",
+    // Registers its own client (RFC 7591) on the first credential request and
+    // saves it here inside the container.
+    dynamicRegistration: "/state/vouch-mcp-credential-broker/client.json",
+    dpop: true,
   },
 ];
 

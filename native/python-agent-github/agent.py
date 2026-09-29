@@ -1,117 +1,91 @@
+"""Broker a GitHub installation token through Vouch and optionally clone a repository."""
+
+import base64
 import os
 import subprocess
 import sys
-import time
 
-import requests
+from vouch_client import VouchError, VouchSession
 
-VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
-CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
-GITHUB_OWNER = os.environ.get('GITHUB_OWNER')
-GITHUB_REPOSITORIES = os.environ.get('GITHUB_REPOSITORIES')
-GITHUB_REPO = os.environ.get('GITHUB_REPO')
 
-if not CLIENT_ID:
-    print('Error: VOUCH_CLIENT_ID environment variable is required')
-    sys.exit(1)
-
-# Step 1: Request device code
-response = requests.post(
-    f'{VOUCH_ISSUER}/oauth/device',
-    data={
-        'client_id': CLIENT_ID,
-        'scope': 'openid email',
-    },
-)
-response.raise_for_status()
-device_data = response.json()
-
-# Step 2: Display instructions to user
-print(f"\nTo sign in, visit: {device_data['verification_uri']}")
-print(f"Enter code: {device_data['user_code']}\n")
-
-# Step 3: Poll for token
-interval = device_data.get('interval', 5)
-while True:
-    time.sleep(interval)
-
-    token_response = requests.post(
-        f'{VOUCH_ISSUER}/oauth/token',
-        data={
-            'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-            'device_code': device_data['device_code'],
-            'client_id': CLIENT_ID,
-        },
-    )
-
-    if token_response.status_code == 200:
-        tokens = token_response.json()
-        print("Authenticated!")
-        print(f"Access token: {tokens['access_token'][:20]}...")
-        break
-
-    error = token_response.json().get('error')
-    if error == 'authorization_pending':
-        continue
-    elif error == 'slow_down':
-        interval += 5
-    elif error == 'expired_token':
-        print('Device code expired. Please try again.')
-        sys.exit(1)
-    elif error == 'access_denied':
-        print('Access denied by user.')
-        sys.exit(1)
-    else:
-        print(f'Error: {token_response.json()}')
-        sys.exit(1)
-
-# Step 4: Request GitHub token via Vouch credential brokering
-print("\n--- GitHub Credential Brokering ---")
-
-body = {}
-if GITHUB_OWNER:
-    body['owner'] = GITHUB_OWNER
-if GITHUB_REPOSITORIES:
-    body['repositories'] = [
-        r.strip() for r in GITHUB_REPOSITORIES.split(',') if r.strip()
-    ]
-
-github_response = requests.post(
-    f'{VOUCH_ISSUER}/v1/credentials/github/token',
-    headers={'Authorization': f'Bearer {tokens["access_token"]}'},
-    json=body if body else None,
-    timeout=10,
-)
-github_response.raise_for_status()
-github_data = github_response.json()
-
-token = github_data['token']
-print(f"GitHub token: {token[:12]}...")
-if github_data.get('expires_at'):
-    print(f"Expires at: {github_data['expires_at']}")
-if github_data.get('permissions'):
-    print(f"Permissions: {github_data['permissions']}")
-
-# Step 5: Optionally clone a repository
-if GITHUB_REPO:
-    owner = GITHUB_OWNER or github_data.get('owner', '')
-    if not owner:
-        print('Error: GITHUB_OWNER is required when GITHUB_REPO is set')
-        sys.exit(1)
-
-    # The installation token is short-lived (~1 hour) and never written to
-    # disk. This is the whole point of Vouch — ephemeral credentials backed
-    # by hardware attestation, replacing long-lived PATs or deploy keys.
-    clone_url = f'https://x-access-token:{token}@github.com/{owner}/{GITHUB_REPO}.git'
-    print(f"\nCloning {owner}/{GITHUB_REPO}...")
+def clone(token: str, owner: str, repo: str) -> bool:
+    """Clone ``owner/repo`` without writing the token to disk or the process list."""
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    # GIT_CONFIG_* passes the header through the environment for this one
+    # command, so it never lands in argv or the clone's .git/config (a
+    # credential embedded in the URL would be saved as the remote).
+    env = {
+        **os.environ,
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.https://github.com/.extraHeader",
+        "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}",
+    }
+    print(f"\nCloning {owner}/{repo}...")
     result = subprocess.run(
-        ['git', 'clone', clone_url],
+        ["git", "clone", f"https://github.com/{owner}/{repo}.git"],
         check=False,
         capture_output=True,
         text=True,
+        env=env,
     )
-    if result.returncode == 0:
-        print(f"Successfully cloned {owner}/{GITHUB_REPO}")
-    else:
+    if result.returncode != 0:
         print(f"Clone failed: {result.stderr}")
-        sys.exit(1)
+        return False
+    print(f"Successfully cloned {owner}/{repo}")
+    return True
+
+
+def github_token(issuer: str, owner: str | None, repositories: str | None) -> str:
+    """Sign in and request a GitHub installation token from Vouch."""
+    vouch = VouchSession(issuer, "vouch-python-agent-github")
+    vouch.login()
+
+    print("\n--- GitHub Credential Brokering ---")
+    # The endpoint always takes a JSON body; an empty object lets Vouch pick
+    # the organization's only connected GitHub account.
+    body = {}
+    if owner:
+        body["owner"] = owner
+    if repositories:
+        body["repositories"] = [r.strip() for r in repositories.split(",") if r.strip()]
+    github_data = vouch.post("/v1/credentials/github/token", body)
+
+    token = github_data["token"]
+    print(f"GitHub token: {token[:12]}...")
+    print(f"Expires at: {github_data['expires_at']}")
+    print(f"Permissions: {github_data['permissions']}")
+    if github_data.get("repositories"):
+        print(f"Repositories: {github_data['repositories']}")
+
+    return token
+
+
+def main() -> int:
+    """Read the configuration and run the agent; returns the exit status."""
+    owner = os.environ.get("GITHUB_OWNER")
+    repo = os.environ.get("GITHUB_REPO")
+    # The token response does not name the account it belongs to, so the
+    # clone URL can only be built from an owner the user supplied.
+    if repo and not owner:
+        print("Error: GITHUB_OWNER is required when GITHUB_REPO is set")
+        return 1
+    try:
+        token = github_token(
+            os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh"),
+            owner,
+            os.environ.get("GITHUB_REPOSITORIES"),
+        )
+    except VouchError as exc:
+        print(f"Error: {exc}")
+        return 1
+    # The installation token is short-lived (about an hour) and held only in
+    # memory. That is the point of brokering: ephemeral credentials backed by
+    # hardware attestation instead of long-lived PATs or deploy keys.
+    if repo and not clone(token, owner, repo):
+        return 1
+    return 0
+
+
+# Guarded so importing the module (as the smoke test does) makes no network calls.
+if __name__ == "__main__":
+    sys.exit(main())

@@ -16,8 +16,11 @@ The Express backend acts as a confidential OAuth client. The browser never sees 
 ## Security properties
 
 - **HttpOnly cookies** — session cookie is inaccessible to JavaScript (XSS cannot steal it)
-- **SameSite=Strict** — cookie is not sent on cross-origin requests (CSRF protection)
+- **Secure over HTTPS** — the cookie is marked `Secure` whenever `VOUCH_REDIRECT_URI` is `https://`
+- **SameSite=Lax** — cookie is not sent on cross-site subrequests or POSTs. Strict would also withhold it on the redirect back from Vouch, breaking the callback
+- **POST-only, same-origin sign-out** — `/auth/logout` rejects requests whose `Origin` is not this app, because Lax still sends the cookie on cross-site top-level GETs
 - **Confidential client** — client secret stays on the server, never exposed to the browser
+- **DPoP-bound access token** ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)) — a per-session key pair is created at `/auth/login` and held server-side. The authorize request binds the code to it (`dpop_jkt`), and the token exchange and the UserInfo call carry DPoP proofs it signs, so neither the code nor the token is usable without that key. The callback rejects a token whose `cnf.jkt` is not that key's thumbprint, and the page shows the thumbprint. Vouch always demands a nonce at the token endpoint; openid-client retries once with the `DPoP-Nonce` it returns
 
 ## Running
 
@@ -27,6 +30,7 @@ docker run -p 3000:3000 \
   -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
+  -e SECRET_KEY="$(openssl rand -hex 32)" \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/auth/callback \
   vouch-bff
 ```
@@ -40,26 +44,18 @@ Open [http://localhost:3000](http://localhost:3000).
 | `VOUCH_ISSUER` | No | OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | Yes | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Yes | OAuth client secret |
+| `SECRET_KEY` | Yes | Session cookie signing secret; generate one with `openssl rand -hex 32`. The app refuses to start without it |
 | `VOUCH_REDIRECT_URI` | No | Callback URL (default: `http://localhost:3000/auth/callback`) |
 
 ## Sign-out
 
-Sign-out is a two-step operation, because neither endpoint alone is sufficient.
-
 **RP-Initiated Logout** (`end_session_endpoint`) ends the Vouch *browser* session.
-The app redirects to `/oauth/logout` with `id_token_hint` and
-`post_logout_redirect_uri`. Vouch shows a confirmation page and only redirects back
-when the hint verifies **and** the URI is registered on the client — otherwise it
-finishes on its own signed-out page rather than following an unvalidated URI.
+`POST /auth/logout` destroys the local session and redirects to `/oauth/logout` with
+`id_token_hint` and `post_logout_redirect_uri`. Vouch shows a confirmation page and
+only redirects back when the hint verifies **and** the URI is registered on the
+client — otherwise it finishes on its own signed-out page rather than following an
+unvalidated URI.
 
-**Token revocation** ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009)) is still
-needed, because RP-initiated logout deletes only the browser session — the access
-token this app holds stays valid at Vouch and at every resource server until it
-expires.
-
-> [!WARNING]
-> Vouch revokes **by user, not by token**. One revocation call signs the user out of
-> every device and every other application, including the Vouch CLI. That is
-> deliberate for a hardware-attested identity provider — "human presence attestation
-> means logout = full logout" — but it is broader than RFC 7009 describes, and it
-> will surprise you if you expect token-scoped revocation.
+Register the exact value the app sends as a post-logout redirect URI: the origin of
+`VOUCH_REDIRECT_URI` followed by `/`, e.g. `http://localhost:3000/`. Vouch compares
+it as an exact string.

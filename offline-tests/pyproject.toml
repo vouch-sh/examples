@@ -1,0 +1,26 @@
+[project]
+name = "vouch-examples-offline-tests"
+version = "0.1.0"
+description = "Offline protocol tests for the credential-brokering examples"
+requires-python = ">=3.14"
+# The union of what the agents and the broker import (they run as
+# subprocesses of this interpreter) plus the test tooling.
+dependencies = [
+    "boto3>=1.43",
+    "cryptography>=50.0.0",
+    "httpx>=0.28",
+    "mcp>=2.0,<3",
+    "pydantic>=2.13",
+    "pyjwt>=2.13",
+    "pytest>=9",
+    "requests>=2.34",
+    "starlette>=1.7",
+    "uvicorn>=0.54",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = "-q"

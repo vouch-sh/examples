@@ -10,3 +10,4 @@ __pycache__
 venv
 *.egg-info
 db.sqlite3
+staticfiles

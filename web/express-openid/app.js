@@ -1,7 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import * as client from 'openid-client';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { calculateJwkThumbprint, createRemoteJWKSet, jwtVerify } from 'jose';
 
 const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const clientId = process.env.VOUCH_CLIENT_ID;
@@ -10,15 +10,54 @@ const callbackUrl = process.env.VOUCH_REDIRECT_URI || 'http://localhost:3000/aut
 
 const config = await client.discovery(new URL(issuer), clientId, clientSecret);
 
+// DPoP (RFC 9449): the authorization code and the access token are bound to a key pair
+// this server holds, so neither is usable on its own if intercepted or leaked. Each
+// sign-in gets its own pair, created at /auth/vouch and kept as JWKs in the server-side
+// session -- the default session store serializes to JSON, which a CryptoKey does not
+// survive. openid-client signs a proof per request and retries once when Vouch answers
+// use_dpop_nonce, which Vouch's token endpoint always does on the first attempt.
+async function newDPoPKeys() {
+  const { publicKey, privateKey } = await client.randomDPoPKeyPair('ES256', {
+    extractable: true,
+  });
+  return {
+    publicJwk: await crypto.subtle.exportKey('jwk', publicKey),
+    privateJwk: await crypto.subtle.exportKey('jwk', privateKey),
+  };
+}
+
+async function dpopHandle({ publicJwk, privateJwk }) {
+  const algorithm = { name: 'ECDSA', namedCurve: 'P-256' };
+  const [publicKey, privateKey] = await Promise.all([
+    crypto.subtle.importKey('jwk', publicJwk, algorithm, true, ['verify']),
+    crypto.subtle.importKey('jwk', privateJwk, algorithm, false, ['sign']),
+  ]);
+  return client.getDPoPHandle(config, { publicKey, privateKey });
+}
+
 const app = express();
 
+// No fallback: a default secret baked into the source lets anyone forge session
+// cookies for every deployment that forgot to set one.
+const sessionSecret = process.env.SECRET_KEY;
+if (!sessionSecret) {
+  throw new Error('SECRET_KEY is required');
+}
+
 app.use(session({
-  secret: process.env.SECRET_KEY || 'dev-secret-change-in-production',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    // Lax, not Strict: the redirect back from Vouch to the callback is a cross-site
+    // navigation, and Strict withholds the cookie holding the PKCE verifier and state.
+    sameSite: 'lax',
+    secure: new URL(callbackUrl).protocol === 'https:',
+  },
 }));
 
-const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
+const JWKS = createRemoteJWKSet(new URL(config.serverMetadata().jwks_uri));
 
 // hardware_verified is only in the access token, not the id_token. The access token
 // is an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload --
@@ -36,6 +75,17 @@ async function verifyAccessToken(token) {
   return payload;
 }
 
+// Claims and server responses are interpolated into HTML, so escape them: an email
+// address can legally contain characters that would otherwise be read as markup.
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     return res.status(401).send('Not authenticated. <a href="/">Go home</a>');
@@ -45,19 +95,25 @@ function requireAuth(req, res, next) {
 
 app.get('/', (req, res) => {
   if (req.session.user) {
-    const hw = req.session.user.hardwareVerified
-      ? `<p><strong>Hardware Verified</strong></p>
-         <p>acr: ${req.session.user.acr || 'N/A'}</p>
-         <p>amr: ${req.session.user.amr.join(', ') || 'N/A'}</p>`
-      : '';
+    const user = req.session.user;
+    const hw = user.hardwareVerified ? '<p><strong>Hardware Verified</strong></p>' : '';
     res.send(`
       <!DOCTYPE html>
       <html>
       <head><title>Vouch + Express</title></head>
       <body>
         <h1>Vouch OIDC + Express</h1>
-        <p>Signed in as ${req.session.user.email}</p>
+        <p>Signed in as ${escapeHtml(user.email)}</p>
         ${hw}
+        <ul>
+          <li>email: ${escapeHtml(user.email)}</li>
+          <li>email_verified: ${user.emailVerified}</li>
+          <li>sub: ${escapeHtml(user.id)}</li>
+          <li>amr: ${escapeHtml(user.amr.join(', ') || 'N/A')}</li>
+          <li>acr: ${escapeHtml(user.acr || 'N/A')}</li>
+          <li>hardware_verified: ${user.hardwareVerified}</li>
+          <li>DPoP-bound (cnf.jkt): ${escapeHtml(user.cnfJkt)}</li>
+        </ul>
         <ul>
           <li><a href="/userinfo">UserInfo</a></li>
           <li><a href="/protected">Protected Route</a></li>
@@ -86,8 +142,9 @@ app.get('/auth/vouch', async (req, res) => {
   const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
   const state = client.randomState();
   const nonce = client.randomNonce();
+  const dpopKeys = await newDPoPKeys();
 
-  req.session.oidc = { codeVerifier, state, nonce };
+  req.session.oidc = { codeVerifier, state, nonce, dpopKeys };
 
   const redirectTo = client.buildAuthorizationUrl(config, {
     redirect_uri: callbackUrl,
@@ -96,6 +153,8 @@ app.get('/auth/vouch', async (req, res) => {
     code_challenge_method: 'S256',
     state,
     nonce,
+    // Binds the code to this key: Vouch refuses to redeem it with a proof from any other.
+    dpop_jkt: await calculateJwkThumbprint(dpopKeys.publicJwk),
   });
 
   res.redirect(redirectTo.href);
@@ -103,25 +162,42 @@ app.get('/auth/vouch', async (req, res) => {
 
 app.get('/auth/vouch/callback', async (req, res) => {
   try {
-    const { codeVerifier, state, nonce } = req.session.oidc || {};
+    const { codeVerifier, state, nonce, dpopKeys } = req.session.oidc || {};
     delete req.session.oidc;
 
     const currentUrl = new URL(req.url, `http://${req.headers.host}`);
-    const tokens = await client.authorizationCodeGrant(config, currentUrl, {
-      pkceCodeVerifier: codeVerifier,
-      expectedState: state,
-      expectedNonce: nonce,
-    });
+    const tokens = await client.authorizationCodeGrant(
+      config,
+      currentUrl,
+      {
+        pkceCodeVerifier: codeVerifier,
+        expectedState: state,
+        expectedNonce: nonce,
+      },
+      undefined,
+      { DPoP: await dpopHandle(dpopKeys) },
+    );
 
     const claims = tokens.claims();
     const atClaims = await verifyAccessToken(tokens.access_token);
+
+    // Without this check a token Vouch issued as a plain bearer token would be
+    // accepted and silently used as one.
+    if (atClaims.cnf?.jkt !== (await calculateJwkThumbprint(dpopKeys.publicJwk))) {
+      throw new Error('Access token is not bound to this sign-in\'s DPoP key');
+    }
     req.session.user = {
       id: claims.sub,
       email: claims.email,
+      emailVerified: claims.email_verified || false,
+      acr: claims.acr || null,
+      amr: claims.amr || [],
       hardwareVerified: atClaims.hardware_verified || false,
-      acr: atClaims.acr || null,
-      amr: atClaims.amr || [],
+      // Thumbprint of the DPoP key the access token is bound to (RFC 9449 section 6).
+      cnfJkt: atClaims.cnf.jkt,
     };
+
+    req.session.dpopKeys = dpopKeys;
 
     req.session.tokens = {
       accessToken: tokens.access_token,
@@ -163,10 +239,10 @@ app.get('/protected', requireAuth, (req, res) => {
     <head><title>Protected</title></head>
     <body>
       <h1>Protected Route</h1>
-      <p>Signed in as ${email}</p>
+      <p>Signed in as ${escapeHtml(email)}</p>
       <p><strong>Hardware Verified</strong></p>
-      <p>acr: ${acr || 'N/A'}</p>
-      <p>amr: ${amr.join(', ') || 'N/A'}</p>
+      <p>acr: ${escapeHtml(acr || 'N/A')}</p>
+      <p>amr: ${escapeHtml(amr.join(', ') || 'N/A')}</p>
       <a href="/">Back</a>
     </body>
     </html>
@@ -176,21 +252,18 @@ app.get('/protected', requireAuth, (req, res) => {
 app.get('/userinfo', requireAuth, async (req, res) => {
   try {
     const { accessToken } = req.session.tokens;
-    const response = await fetch(`${issuer}/oauth/userinfo`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    // A DPoP-bound token must be presented with the DPoP scheme and a fresh proof;
+    // Vouch rejects it as a plain Bearer token.
+    const userinfo = await client.fetchUserInfo(config, accessToken, req.session.user.id, {
+      DPoP: await dpopHandle(req.session.dpopKeys),
     });
-    if (!response.ok) {
-      res.status(response.status).send(`UserInfo request failed: ${response.status}`);
-      return;
-    }
-    const userinfo = await response.json();
     res.send(`
       <!DOCTYPE html>
       <html>
       <head><title>UserInfo</title></head>
       <body>
         <h1>UserInfo Response</h1>
-        <pre>${JSON.stringify(userinfo, null, 2)}</pre>
+        <pre>${escapeHtml(JSON.stringify(userinfo, null, 2))}</pre>
         <a href="/">Back</a>
       </body>
       </html>
@@ -210,7 +283,7 @@ app.get('/introspect', requireAuth, async (req, res) => {
       client_secret: clientSecret,
     });
 
-    const response = await fetch(`${issuer}/oauth/introspect`, {
+    const response = await fetch(config.serverMetadata().introspection_endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params,
@@ -230,7 +303,7 @@ app.get('/introspect', requireAuth, async (req, res) => {
       <body>
         <h1>Token Introspection</h1>
         <p>Active: <strong>${result.active}</strong></p>
-        <pre>${JSON.stringify(result, null, 2)}</pre>
+        <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
         <a href="/">Back</a>
       </body>
       </html>
@@ -240,39 +313,6 @@ app.get('/introspect', requireAuth, async (req, res) => {
     res.status(500).send(err.message);
   }
 });
-
-/**
- * Revoke the access token at the authorization server (RFC 7009).
- *
- * Necessary because RP-initiated logout is narrower than it looks: Vouch's
- * end_session endpoint deletes only the browser session
- * (`delete_session_by_token_hash`), so the access token this app holds stays valid
- * at Vouch and at every resource server until it expires.
- *
- * BE AWARE this is broader than RFC 7009 requires. Vouch revokes by user, not by
- * token (`delete_sessions_for_user`) -- "human presence attestation means logout =
- * full logout" -- so this signs the user out of every device and every other
- * application, including the Vouch CLI. That is intended behaviour for a
- * hardware-attested identity provider; it will surprise you if you expect the
- * token-scoped revocation the RFC describes.
- *
- * Revocation requires client authentication, and a client may only revoke its own
- * tokens. RFC 7009 mandates 200 even for an unknown token, so a non-2xx here means
- * the request itself was malformed.
- */
-async function revokeToken(token) {
-  const response = await fetch(`${issuer}/oauth/revoke`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-    },
-    body: new URLSearchParams({ token, token_type_hint: 'access_token' }),
-  });
-  if (!response.ok) {
-    console.error(`Token revocation failed: ${response.status} ${await response.text()}`);
-  }
-}
 
 /**
  * Sign out.
@@ -285,15 +325,11 @@ async function revokeToken(token) {
  * verifies AND post_logout_redirect_uri is registered on the client; otherwise it
  * ends on its own signed-out page rather than following an unvalidated URI.
  *
- * end_session alone is not a complete sign-out, so the access token is revoked
- * first -- see revokeToken above for what that costs on Vouch.
+ * The access token is deliberately not revoked: Vouch revokes by user, not by token,
+ * so revocation would sign the user out of every application and device.
  */
-app.get('/logout', async (req, res) => {
-  const { accessToken, idToken } = req.session.tokens || {};
-
-  if (accessToken) {
-    await revokeToken(accessToken);
-  }
+app.get('/logout', (req, res) => {
+  const { idToken } = req.session.tokens || {};
 
   const endSession = config.serverMetadata().end_session_endpoint;
   const postLogoutRedirectUri = new URL('/', callbackUrl).href;

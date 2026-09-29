@@ -20,3 +20,8 @@ docker run -it \
   -e VOUCH_CLIENT_ID=your-client-id \
   vouch-rust-device-flow
 ```
+
+## Advanced Features
+
+- **UserInfo + profile enrichment** — Fetches `email` from the UserInfo endpoint and reads `hardware_verified`, `acr` and `amr` from the access token after verifying it against JWKS with `jsonwebtoken`
+- **Post-auth API call** — Makes a second UserInfo call to demonstrate using the access token for subsequent API requests

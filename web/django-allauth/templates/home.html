@@ -5,6 +5,17 @@
   <h1>Vouch OIDC + Django + django-allauth</h1>
   {% if user.is_authenticated %}
     <p>Signed in as {{ user.email }}</p>
+    {% if claims.hardware_verified %}
+      <p><strong>Hardware Verified</strong></p>
+    {% endif %}
+    <ul>
+      <li>email: {{ claims.email }}</li>
+      <li>email_verified: {{ claims.email_verified }}</li>
+      <li>sub: {{ claims.sub }}</li>
+      <li>amr: {{ claims.amr }}</li>
+      <li>acr: {{ claims.acr }}</li>
+      <li>hardware_verified: {{ claims.hardware_verified }}</li>
+    </ul>
     <form method="post" action="{% url 'account_logout' %}">
       {% csrf_token %}
       <button type="submit">Sign out</button>

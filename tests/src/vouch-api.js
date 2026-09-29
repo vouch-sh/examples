@@ -130,8 +130,12 @@ function base64url(buf) {
 /**
  * Create a DPoP proof JWT for a request (RFC 9449).
  *
+ * `token` adds the `ath` hash that binds a proof to the access token it
+ * accompanies (resource requests); `nonce` echoes a server-issued DPoP-Nonce
+ * (token endpoint).
+ *
  * @param {crypto.KeyObject} privateKey
- * @param {{ method: string, url: string, token: string }} opts
+ * @param {{ method: string, url: string, token?: string, nonce?: string }} opts
  * @returns {string}
  */
 function createDpopProof(privateKey, opts) {
@@ -143,14 +147,18 @@ function createDpopProof(privateKey, opts) {
     jwk: { kty: publicJwk.kty, crv: publicJwk.crv, x: publicJwk.x, y: publicJwk.y },
   };
 
-  const tokenHash = crypto.createHash("sha256").update(opts.token).digest();
   const payload = {
     jti: crypto.randomUUID(),
     htm: opts.method,
     htu: opts.url,
     iat: Math.floor(Date.now() / 1000),
-    ath: base64url(tokenHash),
   };
+  if (opts.token) {
+    payload.ath = base64url(crypto.createHash("sha256").update(opts.token).digest());
+  }
+  if (opts.nonce) {
+    payload.nonce = opts.nonce;
+  }
 
   const headerB64 = base64url(Buffer.from(JSON.stringify(header)));
   const payloadB64 = base64url(Buffer.from(JSON.stringify(payload)));
@@ -305,12 +313,44 @@ async function cleanupStaleApps(creds, prefix = "integration-test-") {
   }
 }
 
+/**
+ * Delete a client an example registered for itself (RFC 7591), using the
+ * registration access token it saved (RFC 7592 §2.3).
+ *
+ * Open registrations have no owner, so they never appear in listApps() and
+ * cleanupStaleApps() cannot remove them; this is the only way to clean up.
+ *
+ * @param {string|null} stateJson - The example's saved client.json, or null if it never registered
+ */
+async function deleteRegisteredClient(stateJson) {
+  if (!stateJson) return;
+  const state = JSON.parse(stateJson);
+  const uri = state.registration_client_uri;
+  // Send the registration token only to the Vouch server under test.
+  if (!uri || new URL(uri).origin !== new URL(VOUCH_ISSUER_URL).origin) {
+    throw new Error(`Unexpected registration_client_uri: ${uri}`);
+  }
+  const res = await fetch(uri, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${state.registration_access_token}` },
+  });
+  // RFC 7592 §2.3: 204 on success; 401 when the client is already gone.
+  if (res.status !== 204 && res.status !== 401) {
+    const body = await res.text();
+    throw new Error(
+      `Failed to delete registered client ${state.client_id} (${res.status}): ${body}`,
+    );
+  }
+}
+
 module.exports = {
   loadCookie,
   loadToken,
   loadDpopKey,
+  createDpopProof,
   createApp,
   deleteApp,
   listApps,
   cleanupStaleApps,
+  deleteRegisteredClient,
 };

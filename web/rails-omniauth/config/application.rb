@@ -6,6 +6,9 @@ module VouchExample
   class Application < Rails::Application
     config.load_defaults 8.0
     config.eager_load = false
-    config.secret_key_base = ENV.fetch('SECRET_KEY_BASE') { SecureRandom.hex(64) }
+    # Signs and encrypts the session cookie, which holds the ID token. No fallback: a
+    # random per-process key would silently sign everyone out on every restart.
+    config.secret_key_base = ENV['SECRET_KEY_BASE'].presence ||
+                             raise('SECRET_KEY_BASE is required')
   end
 end

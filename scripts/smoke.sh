@@ -63,6 +63,10 @@ start() {
     -e VOUCH_REDIRECT_URI=http://localhost:3000/callback \
     -e NEXTAUTH_URL=http://localhost:3000 \
     -e NEXTAUTH_SECRET=smoke-secret-value-0123456789abcdef \
+    -e SECRET_KEY=smoke-secret-key-0123456789abcdef \
+    -e SECRET_KEY_BASE=smoke-secret-key-base-0123456789abcdef0123456789abcdef \
+    -e APP_KEY=base64:c21va2UtYXBwLWtleS0wMTIzNDU2Nzg5YWJjZGVmISE= \
+    -e AWS_REGION=us-east-1 \
     "$IMAGE" >/dev/null
 }
 
@@ -141,6 +145,17 @@ a2a/*)
   wait_http "/.well-known/agent-card.json" >/dev/null
   expect_status "/.well-known/agent-card.json" '^200$'
   expect_post_status "/" '^401$'
+  ;;
+
+native/python-agent-*)
+  # These agents register a real OAuth client with Vouch (RFC 7591) and start a
+  # device authorization as soon as they run, so running them here would leave a
+  # client behind on the issuer every time. Import the module instead, with no
+  # network at all: that loads the whole dependency graph, and agent.py only
+  # does work under `if __name__ == "__main__"`.
+  out=$(docker run --rm --network none --entrypoint python "$IMAGE" -c 'import agent' 2>&1) ||
+    fail "failed at import -- a dependency is missing or a breaking major was installed: $out"
+  echo "  imports resolved (module loaded without network)"
   ;;
 
 native/*)

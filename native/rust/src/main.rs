@@ -1,4 +1,8 @@
-use jsonwebtoken::{decode, decode_header, jwk::JwkSet, DecodingKey, Validation};
+use jsonwebtoken::{
+    decode, decode_header,
+    jwk::{AlgorithmParameters, EllipticCurve, JwkSet},
+    Algorithm, DecodingKey, Validation,
+};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -8,6 +12,7 @@ struct DeviceResponse {
     device_code: String,
     user_code: String,
     verification_uri: String,
+    verification_uri_complete: Option<String>,
     #[allow(dead_code)]
     expires_in: u64,
     interval: Option<u64>,
@@ -56,7 +61,12 @@ async fn verify_access_token(
     // are not bearer credentials.
     match header.typ.as_deref() {
         Some(typ) if typ.eq_ignore_ascii_case("at+jwt") => {}
-        other => return Err(format!("unexpected token typ: {other:?}").into()),
+        other => return Err(format!("unexpected token typ: {}", other.unwrap_or_default()).into()),
+    }
+    // Vouch signs access tokens with ES256 only. Pin it rather than trusting the header,
+    // which is attacker-controlled until the signature has been checked.
+    if header.alg != Algorithm::ES256 {
+        return Err(format!("unexpected token alg: {:?}", header.alg).into());
     }
 
     let kid = header.kid.ok_or("access token has no kid")?;
@@ -67,38 +77,70 @@ async fn verify_access_token(
         .json()
         .await?;
     let jwk = jwks.find(&kid).ok_or("kid not published in JWKS")?;
+    // An RSA or other-curve key under this kid is rejected by decode too, but only with an
+    // opaque InvalidKeyFormat; say which key was wrong.
+    match &jwk.algorithm {
+        AlgorithmParameters::EllipticCurve(params) if params.curve == EllipticCurve::P256 => {}
+        _ => return Err(format!("kid {kid} is not a P-256 key").into()),
+    }
 
-    let mut validation = Validation::new(header.alg);
+    let mut validation = Validation::new(Algorithm::ES256);
     validation.set_audience(&[client_id]);
     validation.set_issuer(&[issuer]);
 
     Ok(decode::<AccessTokenClaims>(token, &DecodingKey::from_jwk(jwk)?, &validation)?.claims)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn fetch_userinfo(
+    client: &Client,
+    issuer: &str,
+    access_token: &str,
+) -> Result<UserInfoResponse, Box<dyn std::error::Error>> {
+    let response = client
+        .get(format!("{issuer}/oauth/userinfo"))
+        .bearer_auth(access_token)
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(format!("UserInfo request failed: {}", response.status().as_u16()).into());
+    }
+    Ok(response.json().await?)
+}
+
+async fn device_flow() -> Result<(), Box<dyn std::error::Error>> {
     let issuer =
         std::env::var("VOUCH_ISSUER").unwrap_or_else(|_| "https://us.vouch.sh".to_string());
-    let client_id =
-        std::env::var("VOUCH_CLIENT_ID").expect("VOUCH_CLIENT_ID environment variable is required");
+    let client_id = std::env::var("VOUCH_CLIENT_ID")
+        .ok()
+        .filter(|id| !id.is_empty())
+        .ok_or("VOUCH_CLIENT_ID environment variable is required")?;
 
-    let client = Client::new();
+    // reqwest has no default timeout, so an unresponsive issuer would hang the CLI forever.
+    let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
 
     // Step 1: Request device code
-    let device_response: DeviceResponse = client
+    let response = client
         .post(format!("{issuer}/oauth/device"))
         .form(&[
             ("client_id", &client_id),
             ("scope", &"openid email".to_string()),
         ])
         .send()
-        .await?
-        .json()
         .await?;
+    if !response.status().is_success() {
+        return Err(format!("Device request failed: {}", response.status().as_u16()).into());
+    }
+    let device_response: DeviceResponse = response.json().await?;
 
     // Step 2: Display instructions to user
     println!("\nTo sign in, visit: {}", device_response.verification_uri);
-    println!("Enter code: {}\n", device_response.user_code);
+    println!("Enter code: {}", device_response.user_code);
+    // RFC 8628 section 3.3.1: the same page with the code already filled in, for users who
+    // can open a link (or scan it as a QR code) rather than type the code.
+    if let Some(uri) = &device_response.verification_uri_complete {
+        println!("Or open: {uri}");
+    }
+    println!();
 
     // Step 3: Poll for token
     let mut interval = Duration::from_secs(device_response.interval.unwrap_or(5));
@@ -124,22 +166,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &tokens.access_token[..20.min(tokens.access_token.len())]
             );
 
-            // Fetch user info
-            let userinfo_response = client
-                .get(format!("{issuer}/oauth/userinfo"))
-                .bearer_auth(&tokens.access_token)
-                .send()
-                .await?;
-
-            if userinfo_response.status().is_success() {
-                let userinfo: UserInfoResponse = userinfo_response.json().await?;
-                println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
-            } else {
-                println!("Email: N/A");
-            }
-
+            // Step 4: Fetch user info and verify the access token's hardware claims
+            let userinfo = fetch_userinfo(&client, &issuer, &tokens.access_token).await?;
             let at_claims =
                 verify_access_token(&client, &issuer, &client_id, &tokens.access_token).await?;
+            println!("Email: {}", userinfo.email.as_deref().unwrap_or("N/A"));
             println!("Hardware verified: {}", at_claims.hardware_verified);
             println!("acr: {}", at_claims.acr.as_deref().unwrap_or("N/A"));
             println!(
@@ -150,28 +181,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     at_claims.amr.join(", ")
                 }
             );
+
+            // Step 5: Demonstrate post-auth API call with the access token
+            println!("\n--- Post-auth API call ---");
+            let userinfo2 = fetch_userinfo(&client, &issuer, &tokens.access_token).await?;
+            println!(
+                "Second userinfo call succeeded: {}",
+                userinfo2.email.as_deref().unwrap_or("N/A")
+            );
+
             return Ok(());
         }
 
-        let error: ErrorResponse = response.json().await?;
+        // A proxy or load balancer in front of the issuer can answer with an HTML or empty
+        // body, so a failed response is not guaranteed to be JSON.
+        let status = response.status();
+        let Ok(error) = serde_json::from_str::<ErrorResponse>(&response.text().await?) else {
+            return Err(format!("Token request failed: {}", status.as_u16()).into());
+        };
         match error.error.as_str() {
-            "authorization_pending" => continue,
-            "slow_down" => {
-                interval += Duration::from_secs(5);
-                continue;
-            }
-            "expired_token" => {
-                eprintln!("Device code expired. Please try again.");
-                std::process::exit(1);
-            }
-            "access_denied" => {
-                eprintln!("Access denied by user.");
-                std::process::exit(1);
-            }
-            e => {
-                eprintln!("Unexpected error: {e}");
-                std::process::exit(1);
-            }
+            "authorization_pending" => {}
+            "slow_down" => interval += Duration::from_secs(5),
+            "expired_token" => return Err("Device code expired. Please try again.".into()),
+            "access_denied" => return Err("Access denied by user.".into()),
+            e => return Err(format!("Unexpected error: {e}").into()),
         }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    if let Err(err) = device_flow().await {
+        eprintln!("Error: {err}");
+        std::process::exit(1);
     }
 }
