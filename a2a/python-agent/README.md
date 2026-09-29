@@ -4,23 +4,32 @@ An [Agent-to-Agent (A2A)](https://github.com/a2aproject/A2A) agent secured with 
 
 This example demonstrates:
 - **Agent Card** with OpenID Connect security scheme pointing at Vouch
-- **Bearer token validation** on all A2A requests (agent card discovery is public)
-- **Hardware-backed agent auth** — callers must authenticate with a YubiKey via Vouch
+- **Access token validation** on all A2A requests (agent card discovery is public): RFC 9068 JWTs from Vouch, ES256 only, with issuer, audience, `exp` and `iat` checked
+- **DPoP** ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)) — sender-constrained tokens are accepted as `Authorization: DPoP <token>` with a `DPoP` proof; a DPoP-bound token sent as `Bearer` is refused
+- **Hardware-backed agent auth** — the agent returns the caller's verified claims only when the token has `hardware_verified: true`, and `hardware_key_required` otherwise
 
 ## How It Works
 
 1. A client agent fetches `/.well-known/agent-card.json` to discover this agent's capabilities
 2. The Agent Card declares `openIdConnect` security pointing at your Vouch issuer
 3. The client obtains an access token from Vouch (via any OAuth flow)
-4. The client calls the agent with `Authorization: Bearer <token>`
+4. The client calls the agent with `Authorization: Bearer <token>`, or `Authorization: DPoP <token>` plus a `DPoP` proof for a DPoP-bound token
 5. This agent validates the token against Vouch's JWKS and processes the request
+
+A rejected request gets a `401` with both a `Bearer` and a `DPoP` challenge in
+`WWW-Authenticate`; when a credential was sent, the challenge for its scheme carries
+`error` and `error_description`.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`) |
-| `VOUCH_AUDIENCE` | No | This server's RFC 9728 resource identifier. Published in its metadata and enforced as the token's `aud`. Defaults to `http://localhost:$PORT`; set it when the public URL differs. |
+| `VOUCH_AUDIENCE` | No | This agent's public URL and resource identifier, enforced as the token's `aud`. Defaults to `http://localhost:$PORT`; set it when the public URL differs. |
+
+Callers must send exactly this value as the RFC 8707 `resource` parameter when they
+authorize: Vouch copies it into `aud` byte for byte, so `http://localhost:3000/`
+(trailing slash) is a different audience from `http://localhost:3000`.
 
 ## Run
 
@@ -36,7 +45,7 @@ docker run -p 3000:3000 \
 | Path | Auth Required | Description |
 |------|---------------|-------------|
 | `GET /.well-known/agent-card.json` | No | Agent Card (discovery) |
-| `POST /` | Yes (Bearer) | A2A JSON-RPC endpoint |
+| `POST /` | Yes (Bearer or DPoP) | A2A JSON-RPC endpoint |
 
 ## Agent Card
 

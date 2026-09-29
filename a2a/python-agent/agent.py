@@ -1,5 +1,10 @@
+import base64
+import hashlib
+import hmac
 import json
 import os
+import time
+from urllib.parse import urlsplit
 
 import jwt
 import uvicorn
@@ -24,7 +29,7 @@ from a2a.types import (
     SecurityScheme,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKClient
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -42,32 +47,177 @@ RESOURCE = os.environ.get("VOUCH_AUDIENCE", f"http://localhost:{PORT}")
 # Vouch only issues these two scopes; anything else is silently dropped.
 SCOPES = ["openid", "email"]
 
+# RFC 9449 DPoP. These are the proof algorithms Vouch accepts, and the proof
+# freshness window matches Vouch's own default (VOUCH_DPOP_MAX_AGE) plus the clock
+# skew it tolerates for proofs dated slightly in the future.
+DPOP_ALGORITHMS = ["ES256", "PS256", "EdDSA"]
+DPOP_MAX_AGE = 300
+DPOP_CLOCK_SKEW = 60
+
+# RFC 7638 thumbprints hash only the required members of each key type.
+THUMBPRINT_MEMBERS = {
+    "EC": ("crv", "kty", "x", "y"),
+    "RSA": ("e", "kty", "n"),
+    "OKP": ("crv", "kty", "x"),
+}
+
 jwks_client = PyJWKClient(f"{VOUCH_ISSUER}/oauth/jwks")
 
+# jti -> expiry of every DPoP proof accepted while it could still be fresh. A proof
+# is replayable by anyone who sees it, so each one is single-use.
+seen_proof_ids: dict[str, float] = {}
 
-def verify_bearer_token(request: Request) -> dict | None:
-    """Extract and verify a Bearer token from the Authorization header."""
-    auth = request.headers.get("authorization", "")
-    if not auth.startswith("Bearer "):
-        return None
-    token = auth[7:]
+
+class AuthError(Exception):
+    """A credential was presented but rejected; carried into the challenge."""
+
+    def __init__(self, scheme: str, error: str, description: str):
+        super().__init__(description)
+        self.scheme = scheme
+        self.error = error
+        self.description = description
+
+
+def verify_access_token(token: str) -> dict:
+    # RFC 9068 access tokens carry `typ: at+jwt`. Requiring it rejects ID tokens,
+    # which are not bearer credentials no matter whose they are.
+    if jwt.get_unverified_header(token).get("typ", "").lower() != "at+jwt":
+        raise jwt.InvalidTokenError("not an RFC 9068 access token")
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    return jwt.decode(
+        token,
+        signing_key.key,
+        # Vouch signs access tokens with ES256 only. Taking the algorithm from the
+        # JWKS entry instead would trust whatever the key set advertises.
+        algorithms=["ES256"],
+        issuer=VOUCH_ISSUER,
+        # Without an audience check, any Vouch-issued token reaches this agent,
+        # including one minted for an unrelated client.
+        audience=RESOURCE,
+        options={"require": ["exp", "iat", "sub", "client_id"]},
+    )
+
+
+def sha256_b64url(value: str) -> str:
+    digest = hashlib.sha256(value.encode()).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def jwk_thumbprint(jwk: dict) -> str:
+    members = THUMBPRINT_MEMBERS[jwk["kty"]]
+    canonical = json.dumps(
+        {name: jwk[name] for name in members}, separators=(",", ":"), sort_keys=True
+    )
+    return sha256_b64url(canonical)
+
+
+def normalize_htu(url: str) -> str:
+    # RFC 9449 §4.3: compare without query and fragment, after RFC 3986 syntax- and
+    # scheme-based normalisation, so `HTTP://Host:80/` matches `http://host/`.
+    parts = urlsplit(url)
+    scheme = parts.scheme.lower()
+    host = parts.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    port = parts.port
+    if port is not None and port != {"http": 80, "https": 443}.get(scheme):
+        host = f"{host}:{port}"
+    return f"{scheme}://{host}{parts.path or '/'}"
+
+
+def verify_dpop_proof(proof: str, request: Request, token: str) -> str:
+    """Validate an RFC 9449 proof for this request; return its key's thumbprint."""
+
+    def reject(description: str) -> AuthError:
+        return AuthError("dpop", "invalid_dpop_proof", description)
+
     try:
-        # RFC 9068 access tokens carry `typ: at+jwt`. Requiring it rejects ID tokens,
-        # which are not bearer credentials no matter whose they are.
-        if jwt.get_unverified_header(token).get("typ", "").lower() != "at+jwt":
-            return None
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-        return jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=[signing_key.algorithm_name],
-            issuer=VOUCH_ISSUER,
-            # Without an audience check, any Vouch-issued token reaches this agent,
-            # including one minted for an unrelated client.
-            audience=RESOURCE,
+        header = jwt.get_unverified_header(proof)
+        alg = header.get("alg")
+        jwk = header.get("jwk")
+        if header.get("typ") != "dpop+jwt":
+            raise reject("typ must be dpop+jwt")
+        if alg not in DPOP_ALGORITHMS:
+            raise reject("unsupported proof algorithm")
+        if not isinstance(jwk, dict) or "d" in jwk:
+            raise reject("jwk must be a public key")
+        claims = jwt.decode(
+            proof,
+            PyJWK(jwk, algorithm=alg).key,
+            algorithms=[alg],
+            leeway=DPOP_CLOCK_SKEW,
+            options={"require": ["jti", "htm", "htu", "iat", "ath"]},
         )
-    except Exception:
+        thumbprint = jwk_thumbprint(jwk)
+        htu_matches = normalize_htu(str(claims["htu"])) == normalize_htu(
+            str(request.url)
+        )
+    except (jwt.PyJWTError, KeyError, ValueError) as exc:
+        raise reject("proof is malformed or its signature is invalid") from exc
+
+    now = time.time()
+    if claims["iat"] < now - DPOP_MAX_AGE:
+        raise reject("proof is too old")
+    if claims["htm"] != request.method or not htu_matches:
+        raise reject("proof was made for a different request")
+    ath = claims["ath"]
+    if not isinstance(ath, str) or not hmac.compare_digest(ath, sha256_b64url(token)):
+        raise reject("proof is not bound to this access token")
+
+    jti = claims["jti"]
+    for seen, expires in list(seen_proof_ids.items()):
+        if expires < now:
+            del seen_proof_ids[seen]
+    if not isinstance(jti, str) or jti in seen_proof_ids:
+        raise reject("proof has already been used")
+    seen_proof_ids[jti] = now + DPOP_MAX_AGE + DPOP_CLOCK_SKEW
+    return thumbprint
+
+
+def authenticate(request: Request) -> dict | None:
+    """Return verified claims, None if no credential was sent, or raise AuthError."""
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    scheme = scheme.lower()
+    if scheme not in ("bearer", "dpop") or not token:
         return None
+    try:
+        claims = verify_access_token(token)
+    except jwt.PyJWTError as exc:
+        raise AuthError(scheme, "invalid_token", "access token is invalid") from exc
+
+    jkt = (claims.get("cnf") or {}).get("jkt")
+    if scheme == "bearer":
+        # RFC 9449 §7.2: a DPoP-bound token sent as Bearer is being used without
+        # proof of possession, which is exactly what binding exists to prevent.
+        if jkt:
+            raise AuthError(
+                "bearer", "invalid_token", "DPoP-bound token must use the DPoP scheme"
+            )
+        return claims
+
+    if not jkt:
+        raise AuthError("dpop", "invalid_token", "access token is not DPoP-bound")
+    proofs = request.headers.getlist("dpop")
+    if len(proofs) != 1:
+        raise AuthError("dpop", "invalid_dpop_proof", "send exactly one DPoP proof")
+    thumbprint = verify_dpop_proof(proofs[0], request, token)
+    if not hmac.compare_digest(thumbprint, jkt):
+        raise AuthError("dpop", "invalid_token", "proof key does not match cnf.jkt")
+    return claims
+
+
+def www_authenticate(error: AuthError | None) -> str:
+    # One challenge per accepted scheme (RFC 9110 §11.6.1); the error, when there is
+    # one, goes on the scheme the client used. RFC 6750 §3.1: a request with no
+    # credentials gets no error code.
+    challenges = {"bearer": [], "dpop": [f'algs="{" ".join(DPOP_ALGORITHMS)}"']}
+    if error:
+        challenges[error.scheme][:0] = [
+            f'error="{error.error}"',
+            f'error_description="{error.description}"',
+        ]
+    bearer = " ".join(["Bearer", ", ".join(challenges["bearer"])]).rstrip()
+    return f"{bearer}, DPoP {', '.join(challenges['dpop'])}"
 
 
 class IdentityAgentExecutor(AgentExecutor):
@@ -170,12 +320,21 @@ async def auth_middleware(request: Request, call_next):
     if request.url.path == AGENT_CARD_WELL_KNOWN_PATH:
         return await call_next(request)
 
-    claims = verify_bearer_token(request)
+    error = None
+    try:
+        claims = authenticate(request)
+    except AuthError as exc:
+        claims, error = None, exc
     if claims is None:
         return JSONResponse(
-            {"error": "Unauthorized", "message": "Valid Vouch Bearer token required"},
+            {
+                "error": error.error if error else "invalid_token",
+                "error_description": error.description
+                if error
+                else "Vouch access token required (Bearer or DPoP)",
+            },
             status_code=401,
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": www_authenticate(error)},
         )
     request.state.auth = claims
     return await call_next(request)

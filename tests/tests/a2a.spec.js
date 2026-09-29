@@ -1,10 +1,50 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
+const crypto = require("node:crypto");
+const {
+  loadCookie,
+  loadToken,
+  loadDpopKey,
+  createDpopProof,
+  createApp,
+  deleteApp,
+  cleanupStaleApps,
+} = require("../src/vouch-api");
 const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, obtainAccessToken } = require("../src/oidc-flow");
 const { A2A_EXAMPLES } = require("../src/examples");
 const { VOUCH_ISSUER_URL } = require("../src/config");
 const APP_PREFIX = "integration-test-";
+
+function sendMessageRequest() {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    // `message/send` is the v0.3 method name, served here because the agent
+    // enables v0_3 compat. The native 1.0 name is `SendMessage`.
+    method: "message/send",
+    params: {
+      message: {
+        role: "user",
+        parts: [{ kind: "text", text: "Who am I?" }],
+        messageId: "test-message-1",
+        kind: "message",
+      },
+    },
+  };
+}
+
+/** Assert a JSON-RPC response carries the executor's verified-identity message. */
+function expectVerifiedIdentity(body) {
+  expect(body).toHaveProperty("jsonrpc", "2.0");
+  // A JSON-RPC error is also 200 with jsonrpc:"2.0", so assert the executor
+  // actually ran and produced its identity message from the verified claims.
+  expect(body.error, `JSON-RPC error: ${JSON.stringify(body.error)}`).toBeUndefined();
+  const identity = JSON.parse(body.result.parts[0].text);
+  expect(identity.message).toBe("Identity verified via Vouch OIDC");
+  expect(identity.hardware_verified).toBe(true);
+  expect(identity.email).toMatch(/@/);
+  expect(identity.sub).toBeTruthy();
+}
 
 let cookie;
 let creds;
@@ -88,6 +128,13 @@ for (const example of A2A_EXAMPLES) {
       );
       expect(oidcScheme).toBeTruthy();
       expect(oidcScheme.openIdConnectUrl).toContain(VOUCH_ISSUER_URL);
+
+      // The only scopes Vouch issues.
+      expect(agentCard.securityRequirements).toEqual([
+        { schemes: { vouch_oidc: { list: ["openid", "email"] } } },
+      ]);
+      // Built from VOUCH_AUDIENCE, not the container's internal port.
+      expect(agentCard.supportedInterfaces[0].url).toBe(`${baseUrl}/`);
     });
 
     test("rejects unauthenticated requests", async () => {
@@ -108,6 +155,21 @@ for (const example of A2A_EXAMPLES) {
         }),
       });
       expect(res.status).toBe(401);
+      const challenge = res.headers.get("www-authenticate");
+      expect(challenge).toMatch(/^Bearer\b/);
+      expect(challenge).toMatch(/, DPoP algs="/);
+      // RFC 6750 §3.1: no error code when the request carried no credentials.
+      expect(challenge).not.toContain("error=");
+    });
+
+    test("rejects an invalid token with an error on the Bearer challenge", async () => {
+      const res = await fetch(`${baseUrl}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer not-a-jwt" },
+        body: JSON.stringify(sendMessageRequest()),
+      });
+      expect(res.status).toBe(401);
+      expect(res.headers.get("www-authenticate")).toMatch(/^Bearer error="invalid_token"/);
     });
 
     test("accepts valid bearer token", async ({ browser }) => {
@@ -139,31 +201,70 @@ for (const example of A2A_EXAMPLES) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          // `message/send` is the v0.3 method name, served here because the agent
-          // enables v0_3 compat. The native 1.0 name is `SendMessage`.
-          method: "message/send",
-          params: {
-            message: {
-              role: "user",
-              parts: [{ kind: "text", text: "Who am I?" }],
-              messageId: "test-message-1",
-              kind: "message",
-            },
-          },
-        }),
+        body: JSON.stringify(sendMessageRequest()),
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body).toHaveProperty("jsonrpc", "2.0");
+      expectVerifiedIdentity(await res.json());
+    });
 
-      // A JSON-RPC error is also 200 with jsonrpc:"2.0", so assert the executor
-      // actually ran and produced its identity message.
-      expect(body.error, `JSON-RPC error: ${JSON.stringify(body.error)}`).toBeUndefined();
-      expect(JSON.stringify(body.result)).toContain("Identity verified via Vouch OIDC");
+    test("accepts a DPoP-bound token only with a fresh matching proof", async ({ browser }) => {
+      const dpopApp = await createApp(creds, {
+        name: `${APP_PREFIX}dpop-${example.name}`,
+        applicationType: "web",
+        redirectUris: [callbackUrl],
+      });
+      const context = await browser.newContext();
+      await setupContext(context, cookie);
+      try {
+        const { privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
+        const bound = await obtainAccessToken(context, {
+          clientId: dpopApp.client_id,
+          clientSecret: dpopApp.client_secret,
+          redirectUri: callbackUrl,
+          resource: baseUrl,
+          dpopKey: privateKey,
+        });
+        const payload = JSON.parse(Buffer.from(bound.split(".")[1], "base64url"));
+        expect(payload.cnf?.jkt).toBeTruthy();
+
+        const url = `${baseUrl}/`;
+        const send = (headers) =>
+          fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...headers },
+            body: JSON.stringify(sendMessageRequest()),
+          });
+        const proof = createDpopProof(privateKey, { method: "POST", url, token: bound });
+
+        const ok = await send({ Authorization: `DPoP ${bound}`, DPoP: proof });
+        expect(ok.status).toBe(200);
+        expectVerifiedIdentity(await ok.json());
+
+        // RFC 9449 §11.1: a proof is single-use.
+        const replay = await send({ Authorization: `DPoP ${bound}`, DPoP: proof });
+        expect(replay.status).toBe(401);
+        expect(replay.headers.get("www-authenticate")).toContain(
+          'DPoP error="invalid_dpop_proof"',
+        );
+
+        // RFC 9449 §7.2: a bound token presented as Bearer skips proof of possession.
+        const asBearer = await send({ Authorization: `Bearer ${bound}` });
+        expect(asBearer.status).toBe(401);
+
+        // A valid proof from a different key does not match cnf.jkt.
+        const { privateKey: otherKey } = crypto.generateKeyPairSync("ec", {
+          namedCurve: "P-256",
+        });
+        const wrongKey = await send({
+          Authorization: `DPoP ${bound}`,
+          DPoP: createDpopProof(otherKey, { method: "POST", url, token: bound }),
+        });
+        expect(wrongKey.status).toBe(401);
+      } finally {
+        await context.close();
+        await deleteApp(creds, dpopApp.id);
+      }
     });
   });
 }
