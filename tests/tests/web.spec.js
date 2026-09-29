@@ -170,7 +170,7 @@ for (const example of WEB_EXAMPLES) {
     });
 
     test("logout flow", async ({ browser }) => {
-      if (example.rpInitiatedLogout) {
+      if (example.revokesOnLogout) {
         // Cannot be exercised unattended. These examples revoke their access token
         // on sign-out (RFC 7009), and Vouch revokes by user rather than by token --
         // `delete_sessions_for_user` in services/oidc/introspection.rs. This suite
@@ -213,9 +213,32 @@ for (const example of WEB_EXAMPLES) {
       // Now, log out
       const logoutElement = page.locator(example.logoutSelector).first();
       await expect(logoutElement).toBeVisible({ timeout: 5_000 });
-      await logoutElement.click();
-      await page.waitForLoadState("networkidle", { timeout: 10_000 });
 
+      if (example.rpInitiatedLogout) {
+        // Sign-out hands off to Vouch's end_session endpoint, which shows a
+        // confirmation page. Stop there: confirming would delete the injected Vouch
+        // browser session -- the developer's own -- and the rest of the run would
+        // need `vouch login` again. Check the hand-off carried what Vouch needs to
+        // redirect back, then that the local session is gone.
+        await Promise.all([
+          page.waitForURL(
+            (url) =>
+              url.origin === new URL(VOUCH_ISSUER_URL).origin &&
+              url.pathname === "/oauth/logout",
+            { timeout: 10_000 },
+          ),
+          logoutElement.click(),
+        ]);
+        const endSession = new URL(page.url());
+        expect(endSession.searchParams.get("id_token_hint")).toBeTruthy();
+        expect(endSession.searchParams.get("post_logout_redirect_uri")).toBe(
+          `${baseUrl}/`,
+        );
+        await page.goto(baseUrl);
+      } else {
+        await logoutElement.click();
+        await page.waitForLoadState("networkidle", { timeout: 10_000 });
+      }
 
       // Verify returned to unauthenticated state
       const loginAgain = page.locator(example.loginSelector).first();
