@@ -84,6 +84,7 @@ sse-starlette==3.5.0
     # via mcp
 starlette==1.7.0
     # via
+    #   -r requirements.in
     #   mcp
     #   sse-starlette
 truststore==0.10.4 ; sys_platform != 'emscripten'

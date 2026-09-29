@@ -1,1 +1,2 @@
 requests>=2.34
+cryptography>=50.0.0
