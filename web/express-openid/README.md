@@ -42,6 +42,10 @@ http://localhost:3000/auth/vouch/callback
 
 Register this URL as the allowed callback in your OIDC provider configuration.
 
+## Claims
+
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+
 ## Advanced Features
 
 This example demonstrates several post-login patterns:
@@ -59,6 +63,11 @@ The app redirects to `/oauth/logout` with `id_token_hint` and
 `post_logout_redirect_uri`. Vouch shows a confirmation page and only redirects back
 when the hint verifies **and** the URI is registered on the client — otherwise it
 finishes on its own signed-out page rather than following an unvalidated URI.
+Register this post-logout redirect URI (exact, including the trailing slash):
+
+```
+http://localhost:3000/
+```
 
 **Token revocation** ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009)) is still
 needed, because RP-initiated logout deletes only the browser session — the access

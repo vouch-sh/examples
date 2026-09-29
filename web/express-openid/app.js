@@ -45,19 +45,24 @@ function requireAuth(req, res, next) {
 
 app.get('/', (req, res) => {
   if (req.session.user) {
-    const hw = req.session.user.hardwareVerified
-      ? `<p><strong>Hardware Verified</strong></p>
-         <p>acr: ${req.session.user.acr || 'N/A'}</p>
-         <p>amr: ${req.session.user.amr.join(', ') || 'N/A'}</p>`
-      : '';
+    const user = req.session.user;
+    const hw = user.hardwareVerified ? '<p><strong>Hardware Verified</strong></p>' : '';
     res.send(`
       <!DOCTYPE html>
       <html>
       <head><title>Vouch + Express</title></head>
       <body>
         <h1>Vouch OIDC + Express</h1>
-        <p>Signed in as ${req.session.user.email}</p>
+        <p>Signed in as ${user.email}</p>
         ${hw}
+        <ul>
+          <li>email: ${user.email}</li>
+          <li>email_verified: ${user.emailVerified}</li>
+          <li>sub: ${user.id}</li>
+          <li>amr: ${user.amr.join(', ') || 'N/A'}</li>
+          <li>acr: ${user.acr || 'N/A'}</li>
+          <li>hardware_verified: ${user.hardwareVerified}</li>
+        </ul>
         <ul>
           <li><a href="/userinfo">UserInfo</a></li>
           <li><a href="/protected">Protected Route</a></li>
@@ -118,9 +123,10 @@ app.get('/auth/vouch/callback', async (req, res) => {
     req.session.user = {
       id: claims.sub,
       email: claims.email,
+      emailVerified: claims.email_verified || false,
+      acr: claims.acr || null,
+      amr: claims.amr || [],
       hardwareVerified: atClaims.hardware_verified || false,
-      acr: atClaims.acr || null,
-      amr: atClaims.amr || [],
     };
 
     req.session.tokens = {
