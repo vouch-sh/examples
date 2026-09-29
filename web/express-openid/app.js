@@ -43,6 +43,17 @@ async function verifyAccessToken(token) {
   return payload;
 }
 
+// Claims and server responses are interpolated into HTML, so escape them: an email
+// address can legally contain characters that would otherwise be read as markup.
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     return res.status(401).send('Not authenticated. <a href="/">Go home</a>');
@@ -60,14 +71,14 @@ app.get('/', (req, res) => {
       <head><title>Vouch + Express</title></head>
       <body>
         <h1>Vouch OIDC + Express</h1>
-        <p>Signed in as ${user.email}</p>
+        <p>Signed in as ${escapeHtml(user.email)}</p>
         ${hw}
         <ul>
-          <li>email: ${user.email}</li>
+          <li>email: ${escapeHtml(user.email)}</li>
           <li>email_verified: ${user.emailVerified}</li>
-          <li>sub: ${user.id}</li>
-          <li>amr: ${user.amr.join(', ') || 'N/A'}</li>
-          <li>acr: ${user.acr || 'N/A'}</li>
+          <li>sub: ${escapeHtml(user.id)}</li>
+          <li>amr: ${escapeHtml(user.amr.join(', ') || 'N/A')}</li>
+          <li>acr: ${escapeHtml(user.acr || 'N/A')}</li>
           <li>hardware_verified: ${user.hardwareVerified}</li>
         </ul>
         <ul>
@@ -176,10 +187,10 @@ app.get('/protected', requireAuth, (req, res) => {
     <head><title>Protected</title></head>
     <body>
       <h1>Protected Route</h1>
-      <p>Signed in as ${email}</p>
+      <p>Signed in as ${escapeHtml(email)}</p>
       <p><strong>Hardware Verified</strong></p>
-      <p>acr: ${acr || 'N/A'}</p>
-      <p>amr: ${amr.join(', ') || 'N/A'}</p>
+      <p>acr: ${escapeHtml(acr || 'N/A')}</p>
+      <p>amr: ${escapeHtml(amr.join(', ') || 'N/A')}</p>
       <a href="/">Back</a>
     </body>
     </html>
@@ -203,7 +214,7 @@ app.get('/userinfo', requireAuth, async (req, res) => {
       <head><title>UserInfo</title></head>
       <body>
         <h1>UserInfo Response</h1>
-        <pre>${JSON.stringify(userinfo, null, 2)}</pre>
+        <pre>${escapeHtml(JSON.stringify(userinfo, null, 2))}</pre>
         <a href="/">Back</a>
       </body>
       </html>
@@ -243,7 +254,7 @@ app.get('/introspect', requireAuth, async (req, res) => {
       <body>
         <h1>Token Introspection</h1>
         <p>Active: <strong>${result.active}</strong></p>
-        <pre>${JSON.stringify(result, null, 2)}</pre>
+        <pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>
         <a href="/">Back</a>
       </body>
       </html>
