@@ -43,3 +43,19 @@ Register the following callback URL with your OIDC provider:
 ```
 http://localhost:3000/auth/vouch/callback
 ```
+
+## Claims
+
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+
+## Sign-out
+
+Clearing only the local session would leave the user signed in at Vouch, so the next sign-in would complete silently. Sign-out therefore also ends the Vouch session with [OIDC RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html). omniauth_openid_connect has a built-in logout path, but it sends only `post_logout_redirect_uri` and never `id_token_hint`, so Vouch would never redirect back. `SessionsController#destroy` instead resets the session and redirects to the `end_session_endpoint` from discovery with the stored ID token.
+
+Vouch shows a confirmation page and only redirects back when `id_token_hint` verifies **and** `post_logout_redirect_uri` exactly matches a URI registered on the client. Register this post-logout redirect URI (exact, including the trailing slash):
+
+```
+http://localhost:3000/
+```
+
+Otherwise Vouch finishes on its own signed-out page. The access token is not revoked: Vouch revokes by user, so revocation would sign the user out of every application and device.
