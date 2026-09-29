@@ -2,6 +2,8 @@ import { createPublicKey, verify as verifySignature } from 'node:crypto';
 
 const VOUCH_ISSUER = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
 const CLIENT_ID = process.env.VOUCH_CLIENT_ID;
+// fetch has no default timeout, so an unresponsive issuer would hang the CLI forever.
+const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * Verify a Vouch access token against the issuer's published JWKS.
@@ -23,18 +25,26 @@ async function verifyAccessToken(token) {
   if (header.typ?.toLowerCase() !== 'at+jwt') {
     throw new Error(`unexpected token typ: ${header.typ}`);
   }
+  // Vouch signs access tokens with ES256 only. Pin it rather than trusting the header,
+  // which is attacker-controlled until the signature has been checked.
+  if (header.alg !== 'ES256') throw new Error(`unexpected token alg: ${header.alg}`);
 
-  const jwks = await (await fetch(`${VOUCH_ISSUER}/oauth/jwks`)).json();
+  const jwks = await (
+    await fetch(`${VOUCH_ISSUER}/oauth/jwks`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+  ).json();
   const jwk = jwks.keys.find((k) => k.kid === header.kid);
   if (!jwk) throw new Error(`kid ${header.kid} not published in JWKS`);
+  // node:crypto picks the algorithm from the key, so an RSA key under this kid would be
+  // verified as RSA. Require a P-256 key so the check below is ES256 and nothing else.
+  if (jwk.kty !== 'EC' || jwk.crv !== 'P-256') {
+    throw new Error(`kid ${header.kid} is not a P-256 key`);
+  }
 
   const key = createPublicKey({ key: jwk, format: 'jwk' });
   const data = Buffer.from(`${rawHeader}.${rawPayload}`);
   const signature = Buffer.from(rawSignature, 'base64url');
   // JOSE encodes ECDSA signatures as raw r||s rather than DER.
-  const ok = jwk.kty === 'EC'
-    ? verifySignature('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature)
-    : verifySignature('sha256', data, key, signature);
+  const ok = verifySignature('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature);
   if (!ok) throw new Error('access token signature did not verify');
 
   const claims = JSON.parse(Buffer.from(rawPayload, 'base64url').toString());
@@ -52,11 +62,26 @@ if (!CLIENT_ID) {
 async function fetchUserInfo(accessToken) {
   const response = await fetch(`${VOUCH_ISSUER}/oauth/userinfo`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`UserInfo request failed: ${response.status}`);
   }
   return response.json();
+}
+
+/**
+ * The OAuth `error` code from a token endpoint error body, or undefined.
+ *
+ * A proxy or load balancer in front of the issuer can answer with an HTML or empty
+ * body, so a failed response is not guaranteed to be JSON.
+ */
+function oauthError(body) {
+  try {
+    return JSON.parse(body)?.error;
+  } catch {
+    return undefined;
+  }
 }
 
 async function deviceFlow() {
@@ -68,6 +93,7 @@ async function deviceFlow() {
       client_id: CLIENT_ID,
       scope: 'openid email',
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!deviceResponse.ok) {
@@ -78,7 +104,13 @@ async function deviceFlow() {
 
   // Step 2: Display instructions to user
   console.log(`\nTo sign in, visit: ${deviceData.verification_uri}`);
-  console.log(`Enter code: ${deviceData.user_code}\n`);
+  console.log(`Enter code: ${deviceData.user_code}`);
+  // RFC 8628 section 3.3.1: the same page with the code already filled in, for users who
+  // can open a link (or scan it as a QR code) rather than type the code.
+  if (deviceData.verification_uri_complete) {
+    console.log(`Or open: ${deviceData.verification_uri_complete}`);
+  }
+  console.log();
 
   // Step 3: Poll for token
   let interval = (deviceData.interval || 5) * 1000;
@@ -94,6 +126,7 @@ async function deviceFlow() {
         device_code: deviceData.device_code,
         client_id: CLIENT_ID,
       }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (tokenResponse.ok) {
@@ -112,12 +145,15 @@ async function deviceFlow() {
       // Step 5: Demonstrate post-auth API call with the access token
       console.log('\n--- Post-auth API call ---');
       const userInfo2 = await fetchUserInfo(tokens.access_token);
-      console.log(`Second userinfo call succeeded: ${userInfo2.email}`);
+      console.log(`Second userinfo call succeeded: ${userInfo2.email || 'N/A'}`);
 
       return;
     }
 
-    const { error } = await tokenResponse.json();
+    const error = oauthError(await tokenResponse.text());
+    if (!error) {
+      throw new Error(`Token request failed: ${tokenResponse.status}`);
+    }
     switch (error) {
       case 'authorization_pending':
         continue;
