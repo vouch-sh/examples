@@ -108,3 +108,25 @@ curl -X POST http://localhost:3000/ \
         "role":"user","parts":[{"kind":"text","text":"Who am I?"}],
         "messageId":"1","kind":"message"}}}'
 ```
+
+## Tests
+
+`tests/` holds an offline pytest suite for the agent's token checks: audience
+(including the trailing-slash form), issuer, `exp`/`iat`, algorithm pinning,
+RFC 9728 metadata, DPoP proofs (every algorithm, replay, `htm`/`htu`/`iat`/`ath`,
+key binding), and refusal of mTLS-bound tokens. It also checks that only `hardware_verified` callers get their claims back. Tokens are minted locally
+against a stubbed JWKS, so no Vouch account or network access is needed. The suite
+is not run in CI.
+
+```bash
+uv venv
+uv pip install -r requirements-dev.txt
+uv run pytest -q
+```
+
+`requirements-dev.txt` is compiled from `requirements-dev.in`, which constrains the
+runtime packages to the pins in `requirements.txt`:
+
+```bash
+uv pip compile requirements-dev.in --universal --python-version 3.14 -o requirements-dev.txt
+```
