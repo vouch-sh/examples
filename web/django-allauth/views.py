@@ -8,7 +8,7 @@ def home(request):
     context = {}
     if request.user.is_authenticated:
         account = SocialAccount.objects.filter(user=request.user, provider='vouch').first()
-        # The ID token claims allauth checked at sign-in (iss, aud, exp).
+        # The ID token claims VouchOIDCAdapter verified at sign-in (signature, iss, aud, exp).
         id_claims = account.extra_data.get('id_token', {}) if account else {}
         context['claims'] = {
             'email': id_claims.get('email'),

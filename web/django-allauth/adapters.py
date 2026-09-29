@@ -3,6 +3,7 @@ from urllib.parse import urlencode, urlsplit
 
 import jwt
 from allauth.account.adapter import DefaultAccountAdapter
+from allauth.socialaccount.internal import jwtkit
 from allauth.socialaccount.providers.openid_connect.views import (
     OpenIDConnectOAuth2Adapter,
 )
@@ -46,8 +47,25 @@ class VouchOIDCAdapter(OpenIDConnectOAuth2Adapter):
     with SOCIALACCOUNT_STORE_TOKENS, the access token -- never the raw ID token, which
     RP-initiated logout needs as id_token_hint. And it never looks inside the access
     token, which is the only place hardware_verified appears. Both are captured here,
-    while the token response is still in hand.
+    while the token response is still in hand. It also verifies the ID token signature,
+    which allauth skips.
     """
+
+    def _decode_id_token(self, app, id_token):
+        """Verify the ID token's signature against the JWKS, as well as iss, aud and exp.
+
+        allauth skips the signature check when it fetched the ID token from the token
+        endpoint itself, which OIDC Core 3.1.3.7 permits over TLS. Verify it anyway, as
+        the other examples do.
+        """
+        return jwtkit.verify_and_decode(
+            credential=id_token,
+            keys_url=self.openid_config['jwks_uri'],
+            issuer=self.openid_config['issuer'],
+            audience=app.client_id,
+            lookup_kid=jwtkit.lookup_kid_jwk,
+            verify_signature=True,
+        )
 
     def complete_login(self, request, app, token, **kwargs):
         sociallogin = super().complete_login(request, app, token, **kwargs)
