@@ -5,24 +5,38 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
 
 var (
+	clientID     string
 	oauth2Config *oauth2.Config
-	oidcProvider *oidc.Provider
-	verifier     *oidc.IDTokenVerifier
-	atVerifier   *oidc.IDTokenVerifier
+	// Empty when the provider does not advertise end_session_endpoint.
+	endSessionEndpoint    string
+	postLogoutRedirectURI string
+	oidcProvider          *oidc.Provider
+	verifier              *oidc.IDTokenVerifier
+	atVerifier            *oidc.IDTokenVerifier
 )
 
 type sessionData struct {
-	Email            string `json:"email"`
-	HardwareVerified bool   `json:"hardware_verified"`
+	Email            string   `json:"email"`
+	EmailVerified    bool     `json:"email_verified"`
+	Sub              string   `json:"sub"`
+	AMR              []string `json:"amr"`
+	ACR              string   `json:"acr"`
+	HardwareVerified bool     `json:"hardware_verified"`
+	// Kept for RP-initiated logout: Vouch only honours post_logout_redirect_uri
+	// when a verified id_token_hint identifies the client.
+	RawIDToken string `json:"-"`
 }
 
 // Simple in-memory session store (use a proper store in production)
@@ -35,7 +49,7 @@ func main() {
 	if issuer == "" {
 		issuer = "https://us.vouch.sh"
 	}
-	clientID := os.Getenv("VOUCH_CLIENT_ID")
+	clientID = os.Getenv("VOUCH_CLIENT_ID")
 	clientSecret := os.Getenv("VOUCH_CLIENT_SECRET")
 	redirectURI := os.Getenv("VOUCH_REDIRECT_URI")
 	if redirectURI == "" {
@@ -54,6 +68,22 @@ func main() {
 	}
 
 	verifier = oidcProvider.Verifier(&oidc.Config{ClientID: clientID})
+
+	// go-oidc does not model end_session_endpoint, so read it from the raw
+	// discovery document.
+	var discovery struct {
+		EndSessionEndpoint string `json:"end_session_endpoint"`
+	}
+	if err := oidcProvider.Claims(&discovery); err != nil {
+		log.Fatalf("Failed to parse discovery document: %v", err)
+	}
+	endSessionEndpoint = discovery.EndSessionEndpoint
+
+	postLogout, err := url.Parse(redirectURI)
+	if err != nil {
+		log.Fatalf("Invalid VOUCH_REDIRECT_URI: %v", err)
+	}
+	postLogoutRedirectURI = postLogout.ResolveReference(&url.URL{Path: "/"}).String()
 
 	// Verifier for the access token. Vouch access tokens are ES256-signed RFC 9068
 	// JWTs whose `aud` is this client's own client_id, so the same JWKS-backed
@@ -91,12 +121,31 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		if user.HardwareVerified {
 			hw = "<p><strong>Hardware Verified</strong></p>"
 		}
+		amr := strings.Join(user.AMR, ", ")
+		if amr == "" {
+			amr = "N/A"
+		}
+		acr := user.ACR
+		if acr == "" {
+			acr = "N/A"
+		}
 		fmt.Fprintf(w, `<!DOCTYPE html>
 <html><head><title>Vouch + Go</title></head><body>
 <h1>Vouch OIDC + Go + go-oidc</h1>
 <p>Signed in as %s</p>%s
+<ul>
+<li>email: %s</li>
+<li>email_verified: %t</li>
+<li>sub: %s</li>
+<li>amr: %s</li>
+<li>acr: %s</li>
+<li>hardware_verified: %t</li>
+</ul>
 <a href="/logout">Sign out</a>
-</body></html>`, user.Email, hw)
+</body></html>`,
+			html.EscapeString(user.Email), hw,
+			html.EscapeString(user.Email), user.EmailVerified, html.EscapeString(user.Sub),
+			html.EscapeString(amr), html.EscapeString(acr), user.HardwareVerified)
 	} else {
 		fmt.Fprint(w, `<!DOCTYPE html>
 <html><head><title>Vouch + Go</title></head><body>
@@ -145,7 +194,10 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims struct {
-		Email string `json:"email"`
+		Email         string   `json:"email"`
+		EmailVerified bool     `json:"email_verified"`
+		AMR           []string `json:"amr"`
+		ACR           string   `json:"acr"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		http.Error(w, "Failed to parse claims", http.StatusInternalServerError)
@@ -162,7 +214,12 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	sessionID := generateState()
 	sessions[sessionID] = &sessionData{
 		Email:            claims.Email,
+		EmailVerified:    claims.EmailVerified,
+		Sub:              idToken.Subject,
+		AMR:              claims.AMR,
+		ACR:              claims.ACR,
 		HardwareVerified: hwVerified,
+		RawIDToken:       rawIDToken,
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -174,9 +231,17 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
+// Sign out locally, then at Vouch (OIDC RP-Initiated Logout 1.0). Clearing only the
+// local session leaves the user signed in at Vouch, so the next sign-in would
+// complete silently. Vouch shows a confirmation page and redirects back only when
+// id_token_hint verifies and post_logout_redirect_uri is registered on the client.
 func handleLogout(w http.ResponseWriter, r *http.Request) {
+	var rawIDToken string
 	cookie, err := r.Cookie("session")
 	if err == nil {
+		if user := sessions[cookie.Value]; user != nil {
+			rawIDToken = user.RawIDToken
+		}
 		delete(sessions, cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -185,7 +250,23 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		Path:   "/",
 		MaxAge: -1,
 	})
-	http.Redirect(w, r, "/", http.StatusFound)
+
+	if endSessionEndpoint == "" || rawIDToken == "" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	endSession, err := url.Parse(endSessionEndpoint)
+	if err != nil {
+		http.Error(w, "Invalid end_session_endpoint", http.StatusInternalServerError)
+		return
+	}
+	q := endSession.Query()
+	q.Set("id_token_hint", rawIDToken)
+	q.Set("post_logout_redirect_uri", postLogoutRedirectURI)
+	q.Set("client_id", clientID)
+	endSession.RawQuery = q.Encode()
+	http.Redirect(w, r, endSession.String(), http.StatusFound)
 }
 
 // hardware_verified is only in the access token, not the OIDC id_token. The access
