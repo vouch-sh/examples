@@ -80,10 +80,9 @@ app.get('/auth/callback', async (req, res) => {
     const { codeVerifier, state, nonce } = req.session.oidc || {};
     delete req.session.oidc;
 
-    const currentUrl = new URL(
-      req.url,
-      `http://${req.headers.host}`,
-    );
+    // Built from the configured redirect URI, not the Host header, which the client
+    // controls and which is wrong behind a TLS-terminating proxy.
+    const currentUrl = new URL(req.originalUrl, callbackUrl);
     const tokens = await client.authorizationCodeGrant(
       config,
       currentUrl,
