@@ -52,6 +52,17 @@ builder.Services.AddAuthentication(options =>
             context.ProtocolMessage.RedirectUri = redirectUri;
             return System.Threading.Tasks.Task.CompletedTask;
         },
+        // SignOutAsync on this scheme performs RP-initiated logout: it redirects to
+        // the end_session_endpoint from discovery with the saved ID token as
+        // id_token_hint. Its default post_logout_redirect_uri is
+        // /signout-callback-oidc; send the user straight back to `/` instead. Vouch
+        // only redirects there when the hint verifies and the URI exactly matches
+        // one registered on the client.
+        OnRedirectToIdentityProviderForSignOut = context =>
+        {
+            context.ProtocolMessage.PostLogoutRedirectUri = new Uri(new Uri(redirectUri), "/").ToString();
+            return System.Threading.Tasks.Task.CompletedTask;
+        },
     };
 });
 
@@ -99,6 +110,14 @@ app.MapGet("/", async (HttpContext context) =>
         var email = context.User.FindFirst("email")?.Value
             ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
             ?? "unknown";
+        // The handler validated the ID token at sign-in and SaveTokens kept it in the
+        // protected auth cookie. Reading claims from it directly avoids the handler's
+        // inbound claim mapping, which renames sub and amr and drops acr.
+        var idToken = new JsonWebToken(await context.GetTokenAsync("id_token"));
+        var emailVerified = idToken.TryGetPayloadValue<bool>("email_verified", out var ev) && ev;
+        var amr = string.Join(", ", idToken.Claims.Where(c => c.Type == "amr").Select(c => c.Value));
+        var acr = idToken.TryGetPayloadValue<string>("acr", out var acrValue) ? acrValue : "N/A";
+
         var accessToken = await context.GetTokenAsync("access_token");
         var verified = await VerifyAccessTokenAsync(accessToken);
         var hwVerified = verified is not null
@@ -112,6 +131,14 @@ app.MapGet("/", async (HttpContext context) =>
             <h1>Vouch OIDC + ASP.NET Core</h1>
             <p>Signed in as {email}</p>
             {hwBadge}
+            <ul>
+            <li>email: {email}</li>
+            <li>email_verified: {emailVerified}</li>
+            <li>sub: {idToken.Subject}</li>
+            <li>amr: {(amr == "" ? "N/A" : amr)}</li>
+            <li>acr: {acr}</li>
+            <li>hardware_verified: {hwVerified}</li>
+            </ul>
             <form method="post" action="/logout"><button type="submit">Sign out</button></form>
             </body></html>
             """,
@@ -133,10 +160,11 @@ app.MapGet("/login", () =>
     Results.Challenge(new AuthenticationProperties { RedirectUri = "/" },
         [OpenIdConnectDefaults.AuthenticationScheme]));
 
-app.MapPost("/logout", async (HttpContext context) =>
-{
-    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    return Results.Redirect("/");
-});
+// Clearing only the local cookie leaves the user signed in at Vouch, so the next
+// sign-in would complete silently. Signing out of the OpenID Connect scheme as well
+// hands off to Vouch's end_session endpoint (see OnRedirectToIdentityProviderForSignOut).
+app.MapPost("/logout", () =>
+    Results.SignOut(new AuthenticationProperties { RedirectUri = "/" },
+        [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]));
 
 app.Run();
