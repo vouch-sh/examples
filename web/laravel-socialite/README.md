@@ -34,7 +34,7 @@ docker run -p 3000:3000 \
 
 ## Claims
 
-The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
+The signed-in page shows `email`, `email_verified`, `sub`, `amr` and `acr` from the ID token, which is verified against the issuer's JWKS (signature, `iss`, `aud`, `exp`; the provider's `verify_jwt` option, with the JWKS in the file cache), and `hardware_verified` from the access token. `hardware_verified` is not an ID token claim, so the access token (an ES256-signed RFC 9068 JWT) is verified against the issuer's JWKS -- `typ: at+jwt`, `iss`, `aud` = client ID, `exp` -- before it is read.
 
 ## Sign-out
 

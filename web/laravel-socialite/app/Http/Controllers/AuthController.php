@@ -52,7 +52,12 @@ class AuthController extends \Illuminate\Routing\Controller
             config('services.oidc.client_id'),
             config('services.oidc.client_secret'),
             config('services.oidc.redirect'),
-            ['base_url' => config('services.oidc.base_url')]
+            [
+                'base_url' => config('services.oidc.base_url'),
+                // Off by default in the provider, which would otherwise trust the ID
+                // token's payload unverified. The JWKS is cached in the file cache.
+                'verify_jwt' => true,
+            ]
         );
 
         return Socialite::driver('oidc')->setConfig($config);
