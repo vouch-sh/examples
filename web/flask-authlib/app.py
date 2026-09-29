@@ -1,6 +1,7 @@
 import functools
 import json
 import os
+import secrets
 from urllib.parse import urlencode, urljoin
 
 import jwt
@@ -18,6 +19,17 @@ if not app.secret_key:
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
+
+# Server-side session store (use a proper store in production). Flask's own session
+# is a signed but readable cookie, so the tokens and claims stay here and the cookie
+# carries only a random id. Each access is a single dict operation, which the GIL
+# makes atomic across the dev server's threads.
+SESSIONS = {}
+
+
+def current_session():
+    return SESSIONS.get(session.get('sid'), {})
+
 
 oauth = OAuth(app)
 oauth.register(
@@ -132,7 +144,7 @@ USERINFO_TEMPLATE = """
 
 @app.route('/')
 def home():
-    user = session.get('user')
+    user = current_session().get('user')
     return render_template_string(TEMPLATE, user=user)
 
 def redirect_uri():
@@ -148,7 +160,7 @@ def callback():
     # Authlib has already verified the ID token; 'userinfo' holds its claims.
     id_claims = token.get('userinfo')
     at_claims = verify_access_token(token['access_token'])
-    session['user'] = {
+    user = {
         'email': id_claims.get('email'),
         'email_verified': id_claims.get('email_verified', False),
         'sub': id_claims.get('sub'),
@@ -156,18 +168,23 @@ def callback():
         'amr': id_claims.get('amr', []),
         'hardware_verified': at_claims.get('hardware_verified', False),
     }
-    session['tokens'] = {
+    tokens = {
         'access_token': token.get('access_token'),
         # Kept for RP-initiated logout: Vouch only honours post_logout_redirect_uri
         # when a verified id_token_hint identifies the client.
         'id_token': token.get('id_token'),
         'expires_at': token.get('expires_at'),
     }
+    sid = secrets.token_urlsafe(32)
+    SESSIONS[sid] = {'user': user, 'tokens': tokens}
+    # Start from an empty cookie: a fresh id per sign-in rules out session fixation.
+    session.clear()
+    session['sid'] = sid
     return redirect('/')
 
 @app.route('/protected')
 def protected():
-    user = session.get('user')
+    user = current_session().get('user')
     if not user:
         return redirect('/login')
     if not user.get('hardware_verified'):
@@ -181,7 +198,7 @@ def protected():
 
 @app.route('/userinfo')
 def userinfo():
-    tokens = session.get('tokens')
+    tokens = current_session().get('tokens')
     if not tokens or not tokens.get('access_token'):
         return redirect('/login')
 
@@ -204,8 +221,7 @@ def logout():
     sign-in would complete silently. Vouch shows a confirmation page and redirects
     back only when id_token_hint verifies and post_logout_redirect_uri is registered.
     """
-    session.pop('user', None)
-    tokens = session.pop('tokens', None) or {}
+    tokens = SESSIONS.pop(session.pop('sid', None), {}).get('tokens', {})
     end_session = oauth.vouch.load_server_metadata().get('end_session_endpoint')
     if not end_session or not tokens.get('id_token'):
         return redirect('/')
