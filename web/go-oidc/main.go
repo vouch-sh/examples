@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -40,10 +42,19 @@ type sessionData struct {
 	RawIDToken string `json:"-"`
 }
 
-// Simple in-memory session store (use a proper store in production)
-var sessions = map[string]*sessionData{}
-var states = map[string]bool{}
-var pkceVerifiers = map[string]string{}
+// pendingLogin is what /login remembers for /callback, keyed by the state value.
+type pendingLogin struct {
+	pkceVerifier string
+	nonce        string
+}
+
+// Simple in-memory session store (use a proper store in production). net/http
+// serves each request on its own goroutine, so the maps are guarded by mu.
+var (
+	mu       sync.Mutex
+	sessions = map[string]*sessionData{}
+	pending  = map[string]pendingLogin{}
+)
 
 func main() {
 	issuer := os.Getenv("VOUCH_ISSUER")
@@ -113,7 +124,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session")
 	var user *sessionData
 	if err == nil {
+		mu.Lock()
 		user = sessions[cookie.Value]
+		mu.Unlock()
 	}
 
 	w.Header().Set("Content-Type", "text/html")
@@ -158,25 +171,51 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	state := generateState()
-	states[state] = true
-	pkceVerifier := oauth2.GenerateVerifier()
-	pkceVerifiers[state] = pkceVerifier
-	http.Redirect(w, r, oauth2Config.AuthCodeURL(state, oauth2.S256ChallengeOption(pkceVerifier)), http.StatusFound)
+	login := pendingLogin{
+		pkceVerifier: oauth2.GenerateVerifier(),
+		nonce:        generateState(),
+	}
+	mu.Lock()
+	pending[state] = login
+	mu.Unlock()
+
+	// Bind the state to this browser. Without it, any browser could complete a login
+	// started by another (login CSRF). Lax, because the callback arrives as a
+	// top-level cross-site redirect from Vouch.
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oidc_state",
+		Value:    state,
+		Path:     "/callback",
+		MaxAge:   600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, oauth2Config.AuthCodeURL(state,
+		oauth2.S256ChallengeOption(login.pkceVerifier),
+		oidc.Nonce(login.nonce),
+	), http.StatusFound)
 }
 
 func handleCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
-	if !states[state] {
+	stateCookie, err := r.Cookie("oidc_state")
+	if err != nil || subtle.ConstantTimeCompare([]byte(stateCookie.Value), []byte(state)) != 1 {
 		http.Error(w, "Invalid state", http.StatusBadRequest)
 		return
 	}
-	delete(states, state)
+	http.SetCookie(w, &http.Cookie{Name: "oidc_state", Path: "/callback", MaxAge: -1})
 
-	pkceVerifier := pkceVerifiers[state]
-	delete(pkceVerifiers, state)
+	mu.Lock()
+	login, ok := pending[state]
+	delete(pending, state)
+	mu.Unlock()
+	if !ok {
+		http.Error(w, "Invalid state", http.StatusBadRequest)
+		return
+	}
 
 	code := r.URL.Query().Get("code")
-	token, err := oauth2Config.Exchange(r.Context(), code, oauth2.VerifierOption(pkceVerifier))
+	token, err := oauth2Config.Exchange(r.Context(), code, oauth2.VerifierOption(login.pkceVerifier))
 	if err != nil {
 		http.Error(w, "Token exchange failed", http.StatusInternalServerError)
 		return
@@ -191,6 +230,12 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	idToken, err := verifier.Verify(r.Context(), rawIDToken)
 	if err != nil {
 		http.Error(w, "Token verification failed", http.StatusInternalServerError)
+		return
+	}
+	// go-oidc's verifier does not check the nonce; compare it with the one sent in
+	// the authorization request so a replayed ID token is rejected.
+	if subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(login.nonce)) != 1 {
+		http.Error(w, "Invalid nonce", http.StatusBadRequest)
 		return
 	}
 
@@ -213,6 +258,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	hwVerified, _ := atClaims["hardware_verified"].(bool)
 
 	sessionID := generateState()
+	mu.Lock()
 	sessions[sessionID] = &sessionData{
 		Email:            claims.Email,
 		EmailVerified:    claims.EmailVerified,
@@ -222,12 +268,14 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 		HardwareVerified: hwVerified,
 		RawIDToken:       rawIDToken,
 	}
+	mu.Unlock()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    sessionID,
 		Path:     "/",
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -240,10 +288,12 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	var rawIDToken string
 	cookie, err := r.Cookie("session")
 	if err == nil {
+		mu.Lock()
 		if user := sessions[cookie.Value]; user != nil {
 			rawIDToken = user.RawIDToken
 		}
 		delete(sessions, cookie.Value)
+		mu.Unlock()
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:   "session",
