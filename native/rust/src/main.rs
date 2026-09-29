@@ -1,4 +1,4 @@
-use jsonwebtoken::{decode, decode_header, jwk::JwkSet, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -68,7 +68,9 @@ async fn verify_access_token(
         .await?;
     let jwk = jwks.find(&kid).ok_or("kid not published in JWKS")?;
 
-    let mut validation = Validation::new(header.alg);
+    // Vouch signs access tokens with ES256 only. Pin it rather than taking header.alg,
+    // which is attacker-controlled until the signature has been checked.
+    let mut validation = Validation::new(Algorithm::ES256);
     validation.set_audience(&[client_id]);
     validation.set_issuer(&[issuer]);
 

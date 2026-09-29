@@ -30,7 +30,9 @@ def verify_access_token(token):
     return jwt.decode(
         token,
         signing_key.key,
-        algorithms=[signing_key.algorithm_name],
+        # Vouch signs access tokens with ES256 only. Pin it rather than taking the
+        # algorithm from the JWK or the token header.
+        algorithms=["ES256"],
         issuer=VOUCH_ISSUER,
         audience=CLIENT_ID,
     )

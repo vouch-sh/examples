@@ -23,18 +23,24 @@ async function verifyAccessToken(token) {
   if (header.typ?.toLowerCase() !== 'at+jwt') {
     throw new Error(`unexpected token typ: ${header.typ}`);
   }
+  // Vouch signs access tokens with ES256 only. Pin it rather than trusting the header,
+  // which is attacker-controlled until the signature has been checked.
+  if (header.alg !== 'ES256') throw new Error(`unexpected token alg: ${header.alg}`);
 
   const jwks = await (await fetch(`${VOUCH_ISSUER}/oauth/jwks`)).json();
   const jwk = jwks.keys.find((k) => k.kid === header.kid);
   if (!jwk) throw new Error(`kid ${header.kid} not published in JWKS`);
+  // node:crypto picks the algorithm from the key, so an RSA key under this kid would be
+  // verified as RSA. Require a P-256 key so the check below is ES256 and nothing else.
+  if (jwk.kty !== 'EC' || jwk.crv !== 'P-256') {
+    throw new Error(`kid ${header.kid} is not a P-256 key`);
+  }
 
   const key = createPublicKey({ key: jwk, format: 'jwk' });
   const data = Buffer.from(`${rawHeader}.${rawPayload}`);
   const signature = Buffer.from(rawSignature, 'base64url');
   // JOSE encodes ECDSA signatures as raw r||s rather than DER.
-  const ok = jwk.kty === 'EC'
-    ? verifySignature('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature)
-    : verifySignature('sha256', data, key, signature);
+  const ok = verifySignature('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature);
   if (!ok) throw new Error('access token signature did not verify');
 
   const claims = JSON.parse(Buffer.from(rawPayload, 'base64url').toString());
