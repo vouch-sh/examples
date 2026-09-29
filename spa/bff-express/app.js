@@ -14,6 +14,8 @@ const callbackUrl =
   process.env.VOUCH_REDIRECT_URI ||
   'http://localhost:3000/auth/callback';
 
+const appOrigin = new URL(callbackUrl).origin;
+
 const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
 
 // hardware_verified is only in the access token, not the id_token. The access token is
@@ -43,7 +45,9 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    sameSite: 'strict',
+    // Lax, not Strict: the redirect back from Vouch to /auth/callback is a cross-site
+    // navigation, and Strict withholds the cookie holding the PKCE verifier and state.
+    sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   },
 }));
@@ -196,8 +200,16 @@ async function revokeToken(token) {
  *
  * end_session alone is not a complete sign-out, so the access token is revoked
  * first -- see revokeToken above for what that costs on Vouch.
+ *
+ * A POST that must come from this origin. The Lax session cookie still rides along
+ * on a cross-site top-level GET, and revocation signs the user out everywhere, so a
+ * GET endpoint would let any site trigger that with a link.
  */
-app.get('/auth/logout', async (req, res) => {
+app.post('/auth/logout', async (req, res) => {
+  if (req.get('Origin') !== appOrigin) {
+    return res.status(403).send('Cross-origin sign-out rejected');
+  }
+
   const { accessToken, idToken } = req.session.tokens || {};
 
   if (accessToken) {

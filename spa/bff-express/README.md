@@ -16,7 +16,8 @@ The Express backend acts as a confidential OAuth client. The browser never sees 
 ## Security properties
 
 - **HttpOnly cookies** — session cookie is inaccessible to JavaScript (XSS cannot steal it)
-- **SameSite=Strict** — cookie is not sent on cross-origin requests (CSRF protection)
+- **SameSite=Lax** — cookie is not sent on cross-site subrequests or POSTs. Strict would also withhold it on the redirect back from Vouch, breaking the callback
+- **POST-only, same-origin sign-out** — `/auth/logout` rejects requests whose `Origin` is not this app, because Lax still sends the cookie on cross-site top-level GETs and sign-out revokes every session the user has
 - **Confidential client** — client secret stays on the server, never exposed to the browser
 
 ## Running
@@ -47,7 +48,7 @@ Open [http://localhost:3000](http://localhost:3000).
 Sign-out is a two-step operation, because neither endpoint alone is sufficient.
 
 **RP-Initiated Logout** (`end_session_endpoint`) ends the Vouch *browser* session.
-The app redirects to `/oauth/logout` with `id_token_hint` and
+`POST /auth/logout` redirects to `/oauth/logout` with `id_token_hint` and
 `post_logout_redirect_uri`. Vouch shows a confirmation page and only redirects back
 when the hint verifies **and** the URI is registered on the client — otherwise it
 finishes on its own signed-out page rather than following an unvalidated URI.

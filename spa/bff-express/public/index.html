@@ -43,11 +43,14 @@
 
         app.appendChild(document.createTextNode(' '));
 
-        const logoutLink = document.createElement('a');
-        logoutLink.href = '/auth/logout';
-        logoutLink.textContent = 'Sign out';
-        logoutLink.className = 'btn';
-        app.appendChild(logoutLink);
+        const logoutForm = document.createElement('form');
+        logoutForm.method = 'post';
+        logoutForm.action = '/auth/logout';
+        logoutForm.style.display = 'inline';
+        const logoutBtn = document.createElement('button');
+        logoutBtn.textContent = 'Sign out';
+        logoutForm.appendChild(logoutBtn);
+        app.appendChild(logoutForm);
       } else {
         const loginLink = document.createElement('a');
         loginLink.href = '/auth/login';

@@ -120,9 +120,9 @@ const WEB_EXAMPLES = [
     dir: "spa/bff-express",
     type: "web",
     loginSelector: 'a[href="/auth/login"]',
-    logoutSelector: 'a[href="/auth/logout"]',
+    logoutSelector: 'form[action="/auth/logout"] button',
     callbackPath: "/auth/callback",
-    logoutMethod: "GET",
+    logoutMethod: "POST",
     rpInitiatedLogout: true,
   },
 ];
