@@ -1,5 +1,7 @@
 const { execFileSync, spawn } = require("node:child_process");
+const fs = require("node:fs");
 const net = require("node:net");
+const os = require("node:os");
 const path = require("node:path");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
@@ -231,6 +233,33 @@ function cleanupStaleContainers(prefix = "vouch-test-") {
   }
 }
 
+/**
+ * Read a file out of a container, running or stopped. Returns null when the
+ * container or the file does not exist.
+ *
+ * `docker cp` rather than a bind mount: files the container writes as root
+ * with mode 0600 would be unreadable through a Linux bind mount.
+ *
+ * @param {string} name - Container name
+ * @param {string} containerPath - Absolute path inside the container
+ * @returns {string|null}
+ */
+function readContainerFile(name, containerPath) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vouch-test-"));
+  const dest = path.join(dir, path.basename(containerPath));
+  try {
+    execFileSync("docker", ["cp", `${name}:${containerPath}`, dest], {
+      stdio: "pipe",
+      timeout: 15_000,
+    });
+    return fs.readFileSync(dest, "utf-8");
+  } catch {
+    return null;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 module.exports = {
   getRandomPort,
   build,
@@ -239,5 +268,6 @@ module.exports = {
   logs,
   waitForReady,
   runAttached,
+  readContainerFile,
   cleanupStaleContainers,
 };

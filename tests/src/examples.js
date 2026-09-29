@@ -171,7 +171,7 @@ const SPA_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], extraEnv?: Record<string, string> }>} */
+/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], extraEnv?: Record<string, string>, dynamicRegistration?: string }>} */
 const NATIVE_EXAMPLES = [
   {
     name: "native-node",
@@ -214,9 +214,14 @@ const NATIVE_EXAMPLES = [
       "To sign in, visit:",
       "Enter code:",
     ],
-    // AWS_ROLE_ARN is required at startup; dummy value is fine since
-    // the device flow can't complete in automated tests anyway.
-    extraEnv: { AWS_ROLE_ARN: "arn:aws:iam::000000000000:role/test" },
+    // AWS_ROLE_ARN and AWS_REGION are required at startup; dummy values are
+    // fine since the device flow can't complete in automated tests anyway.
+    extraEnv: {
+      AWS_ROLE_ARN: "arn:aws:iam::000000000000:role/test",
+      AWS_REGION: "us-east-1",
+    },
+    // Registers its own client (RFC 7591) and saves it here inside the container.
+    dynamicRegistration: "/state/vouch-python-agent-aws/client.json",
   },
   {
     name: "native-python-agent-github",
@@ -226,6 +231,7 @@ const NATIVE_EXAMPLES = [
       "To sign in, visit:",
       "Enter code:",
     ],
+    dynamicRegistration: "/state/vouch-python-agent-github/client.json",
   },
   {
     name: "native-python-agent-multi",
@@ -235,10 +241,11 @@ const NATIVE_EXAMPLES = [
       "To sign in, visit:",
       "Enter code:",
     ],
+    dynamicRegistration: "/state/vouch-python-agent-multi/client.json",
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean }>} */
+/** @type {Array<{ name: string, dir: string, type: "mcp", hasWhoami?: boolean, dynamicRegistration?: string }>} */
 const MCP_EXAMPLES = [
   {
     name: "mcp-remote-server-ts",
@@ -256,6 +263,9 @@ const MCP_EXAMPLES = [
     name: "mcp-credential-broker",
     dir: "mcp/credential-broker",
     type: "mcp",
+    // Registers its own client (RFC 7591) on the first credential request and
+    // saves it here inside the container.
+    dynamicRegistration: "/state/vouch-mcp-credential-broker/client.json",
   },
 ];
 

@@ -1,6 +1,23 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
-const { getRandomPort, build, run, stop, waitForReady, cleanupStaleContainers } = require("../src/docker");
+const crypto = require("node:crypto");
+const {
+  loadCookie,
+  loadToken,
+  loadDpopKey,
+  createApp,
+  deleteApp,
+  cleanupStaleApps,
+  deleteRegisteredClient,
+} = require("../src/vouch-api");
+const {
+  getRandomPort,
+  build,
+  run,
+  stop,
+  waitForReady,
+  readContainerFile,
+  cleanupStaleContainers,
+} = require("../src/docker");
 const { setupContext, obtainAccessToken } = require("../src/oidc-flow");
 const { MCP_EXAMPLES } = require("../src/examples");
 const { VOUCH_ISSUER_URL } = require("../src/config");
@@ -91,6 +108,10 @@ for (const example of MCP_EXAMPLES) {
     });
 
     test.afterAll(async () => {
+      // Read the self-registered client before the container is removed.
+      const registration = example.dynamicRegistration
+        ? readContainerFile(containerName, example.dynamicRegistration)
+        : null;
       stop(containerName);
       if (mcpApp) {
         await deleteApp(creds, mcpApp.id);
@@ -98,6 +119,7 @@ for (const example of MCP_EXAMPLES) {
       if (tokenApp) {
         await deleteApp(creds, tokenApp.id);
       }
+      await deleteRegisteredClient(registration);
     });
 
     test("RFC 9728 protected resource metadata", async () => {
@@ -114,6 +136,14 @@ for (const example of MCP_EXAMPLES) {
         (s) => s.replace(/\/$/, "") === issuerBase,
       );
       expect(hasIssuer).toBe(true);
+
+      if (example.name === "mcp-credential-broker") {
+        // The broker writes its metadata by hand so that `resource` is the exact
+        // string it requires as `aud`, and `authorization_servers` the exact `iss`.
+        expect(metadata.resource).toBe(new URL(baseUrl).href);
+        expect(metadata.authorization_servers).toEqual([VOUCH_ISSUER_URL]);
+        expect(metadata.scopes_supported).toEqual(["openid", "email"]);
+      }
     });
 
     test("rejects unauthenticated requests", async () => {
@@ -132,17 +162,15 @@ for (const example of MCP_EXAMPLES) {
         }),
       });
       expect(res.status).toBe(401);
+      if (example.name === "mcp-credential-broker") {
+        // RFC 9449 §7.1: a resource server that accepts DPoP says so on 401.
+        const challenge = res.headers.get("www-authenticate") || "";
+        expect(challenge).toContain("Bearer ");
+        expect(challenge).toMatch(/DPoP algs="[^"]*ES256/);
+      }
     });
 
     test("rejects tokens minted for a different audience", async ({ browser }) => {
-      if (example.name === "mcp-credential-broker") {
-        // This broker forwards the caller's token to Vouch's /v1/credentials/*
-        // endpoints, which reject audience-narrowed tokens, so it cannot require
-        // one. See the comment in mcp/credential-broker/server.py.
-        test.skip();
-        return;
-      }
-
       const otherApp = await createApp(creds, {
         name: `${APP_PREFIX}wrongaud-${example.name}`,
         applicationType: "web",
@@ -199,7 +227,7 @@ for (const example of MCP_EXAMPLES) {
         clientId: tokenApp.client_id,
         clientSecret: tokenApp.client_secret,
         redirectUri: callbackUrl,
-        resource: baseUrl,
+        resource: new URL(baseUrl).href,
       });
 
       await context.close();
@@ -250,7 +278,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource: new URL(baseUrl).href,
         });
 
         await context.close();
@@ -342,7 +370,7 @@ for (const example of MCP_EXAMPLES) {
           clientId: tokenApp.client_id,
           clientSecret: tokenApp.client_secret,
           redirectUri: callbackUrl,
-          resource: baseUrl,
+          resource: new URL(baseUrl).href,
         });
 
         await context.close();
@@ -409,6 +437,111 @@ for (const example of MCP_EXAMPLES) {
       // Vouch sessions are hardware verified, so this should succeed
       const content = JSON.stringify(toolBody.result);
       expect(content).toContain("hardware_verified");
+    });
+
+    test("get-ssh-certificate brokers a certificate via token exchange", async ({
+      browser,
+    }) => {
+      if (example.name !== "mcp-credential-broker") {
+        test.skip();
+        return;
+      }
+      // Exercises the whole broker path against live Vouch: RFC 7591
+      // self-registration, RFC 8693 exchange of the caller's token, and a DPoP +
+      // RFC 9421 signed call to /v1/credentials/ssh with the broker's own key.
+      if (!accessToken) {
+        tokenApp = await createApp(creds, {
+          name: `${APP_PREFIX}token-${example.name}`,
+          applicationType: "web",
+          redirectUris: [callbackUrl],
+        });
+
+        const context = await browser.newContext();
+        await setupContext(context, cookie);
+
+        accessToken = await obtainAccessToken(context, {
+          clientId: tokenApp.client_id,
+          clientSecret: tokenApp.client_secret,
+          redirectUri: callbackUrl,
+          resource: new URL(baseUrl).href,
+        });
+
+        await context.close();
+      }
+
+      const initRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          ...MCP_HEADERS,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test", version: "1.0" },
+          },
+        }),
+      });
+
+      expect(initRes.status).toBe(200);
+
+      const sessionId = initRes.headers.get("mcp-session-id");
+      const headers = {
+        ...MCP_HEADERS,
+        Authorization: `Bearer ${accessToken}`,
+      };
+      if (sessionId) {
+        headers["mcp-session-id"] = sessionId;
+      }
+
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+        }),
+      });
+
+      // OpenSSH public key wire format: string "ssh-ed25519", string key.
+      const { publicKey } = crypto.generateKeyPairSync("ed25519");
+      const sshString = (buf) => {
+        const len = Buffer.alloc(4);
+        len.writeUInt32BE(buf.length);
+        return Buffer.concat([len, buf]);
+      };
+      const rawKey = Buffer.from(publicKey.export({ format: "jwk" }).x, "base64url");
+      const blob = Buffer.concat([
+        sshString(Buffer.from("ssh-ed25519")),
+        sshString(rawKey),
+      ]);
+
+      const toolRes = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 4,
+          method: "tools/call",
+          params: {
+            name: "get-ssh-certificate",
+            arguments: { public_key: `ssh-ed25519 ${blob.toString("base64")}` },
+          },
+        }),
+      });
+
+      expect(toolRes.status).toBe(200);
+      const toolBody = await parseMcpResponse(toolRes);
+      expect(toolBody).toHaveProperty("result");
+      const result = JSON.parse(toolBody.result.content[0].text);
+      expect(result.error).toBeUndefined();
+      expect(result.certificate).toMatch(/^ssh-ed25519-cert-v01@openssh\.com /);
+      expect(result.principals.length).toBeGreaterThan(0);
+      expect(result.valid_for_seconds).toBeGreaterThan(0);
     });
   });
 }

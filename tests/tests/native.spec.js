@@ -1,6 +1,14 @@
 const { test, expect } = require("@playwright/test");
-const { loadCookie, loadToken, loadDpopKey, createApp, deleteApp, cleanupStaleApps } = require("../src/vouch-api");
-const { build, stop, runAttached, cleanupStaleContainers } = require("../src/docker");
+const {
+  loadCookie,
+  loadToken,
+  loadDpopKey,
+  createApp,
+  deleteApp,
+  cleanupStaleApps,
+  deleteRegisteredClient,
+} = require("../src/vouch-api");
+const { build, stop, runAttached, readContainerFile, cleanupStaleContainers } = require("../src/docker");
 const { setupContext, handleDeviceFlow } = require("../src/oidc-flow");
 const { NATIVE_EXAMPLES } = require("../src/examples");
 const { VOUCH_ISSUER_URL } = require("../src/config");
@@ -24,22 +32,30 @@ for (const example of NATIVE_EXAMPLES) {
     let app;
 
     test.beforeAll(async () => {
-      // Create Vouch OAuth app (native type)
-      app = await createApp(creds, {
-        name: appName,
-        applicationType: "native",
-        redirectUris: ["http://localhost/callback"], // placeholder for native
-      });
+      // Examples that register their own client (RFC 7591) need no app.
+      if (!example.dynamicRegistration) {
+        // Create Vouch OAuth app (native type)
+        app = await createApp(creds, {
+          name: appName,
+          applicationType: "native",
+          redirectUris: ["http://localhost/callback"], // placeholder for native
+        });
+      }
 
       // Build the Docker image
       build(example.dir, imageName);
     });
 
     test.afterAll(async () => {
+      // Read the self-registered client before the container is removed.
+      const registration = example.dynamicRegistration
+        ? readContainerFile(containerName, example.dynamicRegistration)
+        : null;
       stop(containerName);
       if (app) {
         await deleteApp(creds, app.id);
       }
+      await deleteRegisteredClient(registration);
     });
 
     test("container starts and displays device code", async () => {
@@ -49,7 +65,7 @@ for (const example of NATIVE_EXAMPLES) {
         image: imageName,
         env: {
           VOUCH_ISSUER: VOUCH_ISSUER_URL,
-          VOUCH_CLIENT_ID: app.client_id,
+          ...(app ? { VOUCH_CLIENT_ID: app.client_id } : {}),
           ...(example.extraEnv || {}),
         },
       });
@@ -77,6 +93,12 @@ for (const example of NATIVE_EXAMPLES) {
 
         // Verify the user code has the expected format (XXXX-XXXX)
         expect(userCode).toMatch(/^[A-Z]{4}-[A-Z]{4}$/);
+
+        if (example.dynamicRegistration) {
+          // Reaching the user code means Vouch accepted both the RFC 7591
+          // registration and the private_key_jwt assertion at /oauth/device.
+          expect(output).toContain("Registered OAuth client");
+        }
       } finally {
         // Kill the container since we can't complete the device flow
         // (requires Google re-authentication which can't be automated)

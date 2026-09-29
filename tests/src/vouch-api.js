@@ -305,6 +305,36 @@ async function cleanupStaleApps(creds, prefix = "integration-test-") {
   }
 }
 
+/**
+ * Delete a client an example registered for itself (RFC 7591), using the
+ * registration access token it saved (RFC 7592 §2.3).
+ *
+ * Open registrations have no owner, so they never appear in listApps() and
+ * cleanupStaleApps() cannot remove them; this is the only way to clean up.
+ *
+ * @param {string|null} stateJson - The example's saved client.json, or null if it never registered
+ */
+async function deleteRegisteredClient(stateJson) {
+  if (!stateJson) return;
+  const state = JSON.parse(stateJson);
+  const uri = state.registration_client_uri;
+  // Send the registration token only to the Vouch server under test.
+  if (!uri || new URL(uri).origin !== new URL(VOUCH_ISSUER_URL).origin) {
+    throw new Error(`Unexpected registration_client_uri: ${uri}`);
+  }
+  const res = await fetch(uri, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${state.registration_access_token}` },
+  });
+  // RFC 7592 §2.3: 204 on success; 401 when the client is already gone.
+  if (res.status !== 204 && res.status !== 401) {
+    const body = await res.text();
+    throw new Error(
+      `Failed to delete registered client ${state.client_id} (${res.status}): ${body}`,
+    );
+  }
+}
+
 module.exports = {
   loadCookie,
   loadToken,
@@ -313,4 +343,5 @@ module.exports = {
   deleteApp,
   listApps,
   cleanupStaleApps,
+  deleteRegisteredClient,
 };
