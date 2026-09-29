@@ -16,7 +16,6 @@ const callbackUrl =
 
 const appOrigin = new URL(callbackUrl).origin;
 
-const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
 
 // hardware_verified is only in the access token, not the id_token. The access token is
 // an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload. This is
@@ -36,6 +35,8 @@ const config = await client.discovery(
   clientId,
   clientSecret,
 );
+
+const JWKS = createRemoteJWKSet(new URL(config.serverMetadata().jwks_uri));
 
 // DPoP (RFC 9449): the authorization code and the access token are bound to a key pair
 // this server holds, so neither is usable on its own if intercepted or leaked. The pair
@@ -62,8 +63,15 @@ async function dpopHandle({ publicJwk, privateJwk }) {
 
 const app = express();
 
+// No fallback: a default secret baked into the source lets anyone forge session
+// cookies for every deployment that forgot to set one.
+const sessionSecret = process.env.SECRET_KEY;
+if (!sessionSecret) {
+  throw new Error('SECRET_KEY is required');
+}
+
 app.use(session({
-  secret: process.env.SECRET_KEY || 'dev-secret-change-in-production',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -71,7 +79,7 @@ app.use(session({
     // Lax, not Strict: the redirect back from Vouch to /auth/callback is a cross-site
     // navigation, and Strict withholds the cookie holding the PKCE verifier and state.
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: new URL(callbackUrl).protocol === 'https:',
   },
 }));
 

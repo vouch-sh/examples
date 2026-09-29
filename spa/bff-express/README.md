@@ -16,6 +16,7 @@ The Express backend acts as a confidential OAuth client. The browser never sees 
 ## Security properties
 
 - **HttpOnly cookies** — session cookie is inaccessible to JavaScript (XSS cannot steal it)
+- **Secure over HTTPS** — the cookie is marked `Secure` whenever `VOUCH_REDIRECT_URI` is `https://`
 - **SameSite=Lax** — cookie is not sent on cross-site subrequests or POSTs. Strict would also withhold it on the redirect back from Vouch, breaking the callback
 - **POST-only, same-origin sign-out** — `/auth/logout` rejects requests whose `Origin` is not this app, because Lax still sends the cookie on cross-site top-level GETs
 - **Confidential client** — client secret stays on the server, never exposed to the browser
@@ -29,6 +30,7 @@ docker run -p 3000:3000 \
   -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_CLIENT_ID=your-client-id \
   -e VOUCH_CLIENT_SECRET=your-client-secret \
+  -e SECRET_KEY="$(openssl rand -hex 32)" \
   -e VOUCH_REDIRECT_URI=http://localhost:3000/auth/callback \
   vouch-bff
 ```
@@ -42,6 +44,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `VOUCH_ISSUER` | No | OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | Yes | OAuth client ID |
 | `VOUCH_CLIENT_SECRET` | Yes | OAuth client secret |
+| `SECRET_KEY` | Yes | Session cookie signing secret; generate one with `openssl rand -hex 32`. The app refuses to start without it |
 | `VOUCH_REDIRECT_URI` | No | Callback URL (default: `http://localhost:3000/auth/callback`) |
 
 ## Sign-out
