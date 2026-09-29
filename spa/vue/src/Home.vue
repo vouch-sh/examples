@@ -16,10 +16,12 @@ function decodeUnverifiedForDisplay(token) {
 
 const user = ref(null);
 const isLoading = ref(true);
-const hardwareVerified = computed(() => {
-  if (!user.value?.access_token) return false;
-  return decodeUnverifiedForDisplay(user.value.access_token).hardware_verified || false;
-});
+const atClaims = computed(() =>
+  user.value?.access_token ? decodeUnverifiedForDisplay(user.value.access_token) : {},
+);
+const now = ref(Math.floor(Date.now() / 1000));
+const timeLeft = computed(() => Math.max((user.value?.expires_at ?? 0) - now.value, 0));
+let timer;
 
 async function onExpired() {
   await userManager.removeUser();
@@ -28,19 +30,42 @@ async function onExpired() {
 
 onMounted(async () => {
   userManager.events.addAccessTokenExpired(onExpired);
+  timer = setInterval(() => { now.value = Math.floor(Date.now() / 1000); }, 1000);
   user.value = await getUser();
   isLoading.value = false;
 });
 
-onUnmounted(() => userManager.events.removeAccessTokenExpired(onExpired));
+onUnmounted(() => {
+  userManager.events.removeAccessTokenExpired(onExpired);
+  clearInterval(timer);
+});
 </script>
 
 <template>
   <div v-if="isLoading">Loading...</div>
   <div v-else-if="user">
     <p>Signed in as {{ user.profile.email }}</p>
-    <p v-if="hardwareVerified"><strong>Hardware Verified</strong></p>
-    <button @click="logout">Sign out</button>
+    <p v-if="atClaims.hardware_verified"><strong>Hardware Verified</strong></p>
+    <div style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 4px">
+      <h3>Profile Claims</h3>
+      <ul style="list-style: none; padding: 0">
+        <li><strong>sub:</strong> {{ user.profile.sub }}</li>
+        <li><strong>email:</strong> {{ user.profile.email }}</li>
+        <li v-if="user.profile.email_verified !== undefined">
+          <strong>email_verified:</strong> {{ String(user.profile.email_verified) }}
+        </li>
+        <li><strong>hardware_verified:</strong> {{ String(atClaims.hardware_verified || false) }}</li>
+        <li v-if="atClaims.acr"><strong>acr:</strong> {{ atClaims.acr }}</li>
+        <li v-if="atClaims.amr"><strong>amr:</strong> {{ atClaims.amr.join(', ') }}</li>
+      </ul>
+    </div>
+    <div style="margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px">
+      <h3>Token Info</h3>
+      <p>Token expires in: <strong>{{ timeLeft }}s</strong></p>
+    </div>
+    <div style="margin-top: 1rem">
+      <button @click="logout">Sign out</button>
+    </div>
   </div>
   <button v-else @click="login">Sign in with Vouch</button>
 </template>

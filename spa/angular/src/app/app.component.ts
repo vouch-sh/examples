@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
@@ -26,7 +26,24 @@ function decodeUnverifiedForDisplay(token: string): Record<string, unknown> {
       <div *ngIf="isAuthenticated; else loginBlock">
         <p>Signed in as {{ email }}</p>
         <p *ngIf="hardwareVerified"><strong>Hardware Verified</strong></p>
-        <button (click)="logout()">Sign out</button>
+        <div style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-radius: 4px">
+          <h3>Profile Claims</h3>
+          <ul style="list-style: none; padding: 0">
+            <li><strong>sub:</strong> {{ sub }}</li>
+            <li><strong>email:</strong> {{ email }}</li>
+            <li *ngIf="emailVerified !== undefined"><strong>email_verified:</strong> {{ emailVerified }}</li>
+            <li><strong>hardware_verified:</strong> {{ hardwareVerified }}</li>
+            <li *ngIf="acr"><strong>acr:</strong> {{ acr }}</li>
+            <li *ngIf="amr.length"><strong>amr:</strong> {{ amr.join(', ') }}</li>
+          </ul>
+        </div>
+        <div style="margin-top: 1rem; padding: 1rem; background: #f5f5f5; border-radius: 4px">
+          <h3>Token Info</h3>
+          <p>Token expires in: <strong>{{ timeLeft() }}s</strong></p>
+        </div>
+        <div style="margin-top: 1rem">
+          <button (click)="logout()">Sign out</button>
+        </div>
       </div>
 
       <ng-template #loginBlock>
@@ -37,22 +54,36 @@ function decodeUnverifiedForDisplay(token: string): Record<string, unknown> {
     </div>
   `,
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   private oidc = inject(OidcSecurityService);
+  private timer?: ReturnType<typeof setInterval>;
 
   isAuthenticated = false;
+  sub = '';
   email = '';
+  emailVerified?: boolean;
   hardwareVerified = false;
+  acr = '';
+  amr: string[] = [];
+  timeLeft = signal(0);
 
   ngOnInit() {
     this.oidc.checkAuth().subscribe(({ isAuthenticated, userData, accessToken }) => {
       this.isAuthenticated = isAuthenticated;
       if (userData) {
+        this.sub = userData.sub || '';
         this.email = userData.email || '';
+        this.emailVerified = userData.email_verified;
       }
       if (accessToken) {
         const atClaims = decodeUnverifiedForDisplay(accessToken);
         this.hardwareVerified = (atClaims['hardware_verified'] as boolean) || false;
+        this.acr = (atClaims['acr'] as string) || '';
+        this.amr = (atClaims['amr'] as string[]) || [];
+        const exp = atClaims['exp'] as number;
+        const tick = () => this.timeLeft.set(Math.max(exp - Math.floor(Date.now() / 1000), 0));
+        tick();
+        this.timer = setInterval(tick, 1000);
       }
       // After processing the callback, redirect to home with a full page load
       // so checkAuth() re-reads stored tokens and updates the UI
@@ -60,6 +91,10 @@ export class AppComponent implements OnInit {
         window.location.href = '/';
       }
     });
+  }
+
+  ngOnDestroy() {
+    clearInterval(this.timer);
   }
 
   login() {
