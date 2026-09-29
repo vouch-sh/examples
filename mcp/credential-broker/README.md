@@ -30,11 +30,11 @@ Unauthenticated requests get a 401 with both a `Bearer` and a `DPoP` challenge p
 
 | Tool | Description |
 |------|-------------|
-| `get-aws-credentials` | Get an AWS ID token from Vouch pinned to `role_arn`, then exchange it for temporary AWS credentials via STS |
+| `get-aws-credentials` | Get an AWS ID token from Vouch pinned to `role_arn`, then exchange it for temporary AWS credentials at the regional STS endpoint for `AWS_REGION` |
 | `get-github-token` | Get a GitHub installation token for the user's organization via Vouch |
 | `get-ssh-certificate` | Sign an SSH public key with a Vouch-issued certificate |
 
-The tools need a hardware-verified caller: Vouch refuses credentials for a session that did not verify the user's security key. They also need the caller's token to be a Bearer token: Vouch exchanges a DPoP-bound subject token only for a request that proves that token's own key, which belongs to the MCP client, so a caller authenticated with DPoP gets an error from the credential tools instead of an exchange.
+The tools need a hardware-verified caller: Vouch refuses credentials for a session that did not verify the user's security key. They also need the caller's token to be a Bearer token. A DPoP-bound token may only be used by the holder of its key (RFC 9449), which is the MCP client, so the broker does not exchange one; a caller authenticated with DPoP gets an error from the credential tools.
 
 ## Environment Variables
 
@@ -42,6 +42,7 @@ The tools need a hardware-verified caller: Vouch refuses credentials for a sessi
 |----------|----------|-------------|
 | `VOUCH_ISSUER` | No | Vouch issuer URL (default: `https://us.vouch.sh`). Published verbatim in `authorization_servers` and required verbatim as the token `iss` |
 | `VOUCH_AUDIENCE` | No | This server's URL (default: `http://localhost:3000`). It is normalised the way `new URL(...).href` does (`http://localhost:3000/`); that string is published as `resource` and required verbatim as the token `aud`, and its origin is the base for DPoP `htu` checks |
+| `AWS_REGION` | Yes | Region whose STS endpoint (`https://sts.<region>.amazonaws.com/`) `get-aws-credentials` calls |
 | `PORT` | No | Listen port (default: `3000`) |
 | `XDG_STATE_HOME` | No | Where the broker's registered client is kept (default `~/.local/state`; `/state` in the Docker image) |
 
@@ -53,6 +54,7 @@ docker run -p 3000:3000 \
   -v vouch-mcp-credential-broker:/state \
   -e VOUCH_ISSUER=https://us.vouch.sh \
   -e VOUCH_AUDIENCE=http://localhost:3000 \
+  -e AWS_REGION=us-east-1 \
   vouch-mcp-credential-broker
 ```
 

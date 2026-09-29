@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
@@ -29,6 +30,13 @@ logger = logging.getLogger("credential_broker")
 
 VOUCH_ISSUER = os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh")
 PORT = int(os.environ.get("PORT", "3000"))
+# STS is called at its regional endpoint. The legacy global endpoint exists
+# only in the commercial partition, and AWS recommends regional endpoints.
+AWS_REGION = os.environ.get("AWS_REGION", "")
+# Same override variable the AWS SDKs honour, e.g. for a local STS stand-in.
+STS_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL_STS") or (
+    f"https://sts.{AWS_REGION}.amazonaws.com{'.cn' if AWS_REGION.startswith('cn-') else ''}/"
+)
 
 # Our RFC 9728 resource identifier, in WHATWG URL serialisation (what
 # `new URL(...).href` gives: lowercase scheme and host, no default port, and
@@ -284,9 +292,10 @@ def _caller_token() -> tuple[str | None, str | None]:
         return None, "No authentication context"
     cnf = (access_token.claims or {}).get("cnf")
     if isinstance(cnf, dict) and cnf.get("jkt"):
-        # Vouch only exchanges a DPoP-bound subject token for a request that
-        # proves the subject's own key (services/oidc/exchange.rs), and that
-        # key belongs to the MCP client, not to this broker.
+        # A DPoP-bound token may only be used by the holder of its key (RFC
+        # 9449), and that key belongs to the MCP client. Exchanging it would
+        # have the broker present it without that proof and walk away with a
+        # token bound to a different key, so the broker refuses instead.
         return (
             None,
             "Credential brokering needs a Bearer access token; DPoP-bound tokens cannot be exchanged by the broker",
@@ -320,7 +329,7 @@ async def get_aws_credentials(role_arn: str) -> str:
 
     async with httpx.AsyncClient(timeout=10) as client:
         sts_resp = await client.post(
-            "https://sts.amazonaws.com/",
+            STS_ENDPOINT,
             data={
                 "Action": "AssumeRoleWithWebIdentity",
                 "RoleArn": role_arn,
@@ -390,6 +399,9 @@ async def get_ssh_certificate(public_key: str) -> str:
 
 
 if __name__ == "__main__":
+    if not AWS_REGION:
+        print("Error: AWS_REGION environment variable is required")
+        sys.exit(1)
     logging.basicConfig(
         level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
     )

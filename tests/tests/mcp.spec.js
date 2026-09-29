@@ -96,6 +96,8 @@ for (const example of MCP_EXAMPLES) {
           VOUCH_CLIENT_ID: mcpApp.client_id,
           VOUCH_CLIENT_SECRET: mcpApp.client_secret,
           VOUCH_REDIRECT_URI: callbackUrl,
+          // The credential broker calls STS at a regional endpoint.
+          AWS_REGION: "us-east-1",
           // The container listens on 3000 internally but is published on a random
           // host port, so it cannot derive its own resource identifier. This is the
           // value clients send as the RFC 8707 `resource` parameter and the value
