@@ -2,7 +2,7 @@
 
 **Integration type:** Single Page Application (Public Client)
 
-Uses [angular-auth-oidc-client](https://github.com/damienbod/angular-auth-oidc-client) with Angular 19. PKCE is used automatically — no client secret needed.
+Uses [angular-auth-oidc-client](https://github.com/damienbod/angular-auth-oidc-client) with Angular 22. PKCE is used automatically — no client secret needed.
 
 **Vouch application type:** SPA (public client — no client secret, authorized for the authorization code grant with PKCE).
 
