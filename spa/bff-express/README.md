@@ -19,6 +19,7 @@ The Express backend acts as a confidential OAuth client. The browser never sees 
 - **SameSite=Lax** — cookie is not sent on cross-site subrequests or POSTs. Strict would also withhold it on the redirect back from Vouch, breaking the callback
 - **POST-only, same-origin sign-out** — `/auth/logout` rejects requests whose `Origin` is not this app, because Lax still sends the cookie on cross-site top-level GETs
 - **Confidential client** — client secret stays on the server, never exposed to the browser
+- **DPoP-bound access token** ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)) — the token exchange and the UserInfo call carry DPoP proofs signed by a per-session key pair held server-side, so the token is useless without that key. The callback rejects a token whose `cnf.jkt` is not that key's thumbprint, and the page shows the thumbprint. Vouch always demands a nonce at the token endpoint; openid-client retries once with the `DPoP-Nonce` it returns
 
 ## Running
 

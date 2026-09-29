@@ -1,7 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import * as client from 'openid-client';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { calculateJwkThumbprint, createRemoteJWKSet, jwtVerify } from 'jose';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -36,6 +36,19 @@ const config = await client.discovery(
   clientId,
   clientSecret,
 );
+
+// DPoP (RFC 9449): the access token is bound to a key pair this server holds, so a
+// token leaked from the session store or a log is useless on its own. The pair is kept
+// as JWKs in the server-side session next to the token it is bound to -- the default
+// session store serializes to JSON, which a CryptoKey does not survive.
+async function dpopHandle({ publicJwk, privateJwk }) {
+  const algorithm = { name: 'ECDSA', namedCurve: 'P-256' };
+  const [publicKey, privateKey] = await Promise.all([
+    crypto.subtle.importKey('jwk', publicJwk, algorithm, true, ['verify']),
+    crypto.subtle.importKey('jwk', privateJwk, algorithm, false, ['sign']),
+  ]);
+  return client.getDPoPHandle(config, { publicKey, privateKey });
+}
 
 const app = express();
 
@@ -83,6 +96,10 @@ app.get('/auth/callback', async (req, res) => {
     // Built from the configured redirect URI, not the Host header, which the client
     // controls and which is wrong behind a TLS-terminating proxy.
     const currentUrl = new URL(req.originalUrl, callbackUrl);
+
+    // Vouch's token endpoint always answers the first DPoP proof with use_dpop_nonce;
+    // openid-client caches the DPoP-Nonce it returns and retries once.
+    const dpopKeys = await client.randomDPoPKeyPair('ES256', { extractable: true });
     const tokens = await client.authorizationCodeGrant(
       config,
       currentUrl,
@@ -91,10 +108,19 @@ app.get('/auth/callback', async (req, res) => {
         expectedState: state,
         expectedNonce: nonce,
       },
+      undefined,
+      { DPoP: client.getDPoPHandle(config, dpopKeys) },
     );
 
     const claims = tokens.claims();
     const atClaims = await verifyAccessToken(tokens.access_token);
+
+    // Without this check a token Vouch issued as a plain bearer token would be
+    // accepted and silently used as one.
+    const publicJwk = await crypto.subtle.exportKey('jwk', dpopKeys.publicKey);
+    if (atClaims.cnf?.jkt !== (await calculateJwkThumbprint(publicJwk))) {
+      throw new Error('Access token is not bound to this server\'s DPoP key');
+    }
 
     // New session ID on sign-in, so a session ID planted before login (session
     // fixation) never becomes an authenticated one.
@@ -108,6 +134,12 @@ app.get('/auth/callback', async (req, res) => {
       hardwareVerified: atClaims.hardware_verified || false,
       acr: atClaims.acr || null,
       amr: atClaims.amr || [],
+      dpopJkt: atClaims.cnf.jkt,
+    };
+
+    req.session.dpopKeys = {
+      publicJwk,
+      privateJwk: await crypto.subtle.exportKey('jwk', dpopKeys.privateKey),
     };
 
     req.session.tokens = {
@@ -140,23 +172,18 @@ app.get('/api/userinfo', async (req, res) => {
   }
 
   try {
-    const response = await fetch(`${issuer}/oauth/userinfo`, {
-      headers: {
-        Authorization: `Bearer ${req.session.tokens.accessToken}`,
-      },
-    });
-
-    if (!response.ok) {
-      return res
-        .status(response.status)
-        .json({ error: `UserInfo request failed: ${response.status}` });
-    }
-
-    const userinfo = await response.json();
+    // A DPoP-bound token must be sent with the DPoP scheme and a fresh proof;
+    // presented as Bearer, Vouch rejects it.
+    const userinfo = await client.fetchUserInfo(
+      config,
+      req.session.tokens.accessToken,
+      req.session.user.id,
+      { DPoP: await dpopHandle(req.session.dpopKeys) },
+    );
     res.json(userinfo);
   } catch (err) {
     console.error('UserInfo error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 

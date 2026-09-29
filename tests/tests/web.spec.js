@@ -101,6 +101,18 @@ for (const example of WEB_EXAMPLES) {
         timeout: 10_000,
       });
 
+      // The access token carries cnf.jkt only when the DPoP proof was accepted.
+      if (example.dpopBound) {
+        await expect(page.locator("body")).toContainText("DPoP-bound (cnf.jkt)");
+      }
+
+      if (example.userinfoSelector) {
+        await page.locator(example.userinfoSelector).first().click();
+        await expect(page.locator(example.userinfoOutput)).toContainText('"email"', {
+          timeout: 5_000,
+        });
+      }
+
       await context.close();
     });
 

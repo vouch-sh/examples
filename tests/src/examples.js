@@ -4,7 +4,7 @@
  * app type, login/logout selectors, and callback path.
  */
 
-/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean, revokesOnLogout?: boolean }>} */
+/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean, revokesOnLogout?: boolean, dpopBound?: boolean, userinfoSelector?: string, userinfoOutput?: string }>} */
 const WEB_EXAMPLES = [
   {
     name: "express-openid",
@@ -127,6 +127,10 @@ const WEB_EXAMPLES = [
     callbackPath: "/auth/callback",
     logoutMethod: "POST",
     rpInitiatedLogout: true,
+    dpopBound: true,
+    // UserInfo is fetched over DPoP, so exercising it proves the proof is accepted
+    userinfoSelector: 'button:has-text("Fetch UserInfo")',
+    userinfoOutput: "#userinfo-output",
   },
 ];
 
