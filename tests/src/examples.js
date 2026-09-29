@@ -4,7 +4,7 @@
  * app type, login/logout selectors, and callback path.
  */
 
-/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean, revokesOnLogout?: boolean }>} */
+/** @type {Array<{ name: string, dir: string, type: "web"|"spa"|"native"|"mcp"|"a2a", loginSelector: string, logoutSelector: string, callbackPath: string, logoutMethod?: string, rpInitiatedLogout?: boolean }>} */
 const WEB_EXAMPLES = [
   {
     name: "express-openid",
@@ -17,9 +17,6 @@ const WEB_EXAMPLES = [
     // Signs out at Vouch too, so logout goes via the end_session endpoint and
     // stops on Vouch's confirmation page before returning here.
     rpInitiatedLogout: true,
-    // Also revokes its access token on sign-out, which on Vouch deletes every
-    // session the user holds.
-    revokesOnLogout: true,
   },
   {
     name: "nextjs-nextauth",
@@ -137,7 +134,6 @@ const WEB_EXAMPLES = [
     callbackPath: "/auth/callback",
     logoutMethod: "GET",
     rpInitiatedLogout: true,
-    revokesOnLogout: true,
   },
 ];
 

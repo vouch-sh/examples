@@ -248,39 +248,6 @@ app.get('/introspect', requireAuth, async (req, res) => {
 });
 
 /**
- * Revoke the access token at the authorization server (RFC 7009).
- *
- * Necessary because RP-initiated logout is narrower than it looks: Vouch's
- * end_session endpoint deletes only the browser session
- * (`delete_session_by_token_hash`), so the access token this app holds stays valid
- * at Vouch and at every resource server until it expires.
- *
- * BE AWARE this is broader than RFC 7009 requires. Vouch revokes by user, not by
- * token (`delete_sessions_for_user`) -- "human presence attestation means logout =
- * full logout" -- so this signs the user out of every device and every other
- * application, including the Vouch CLI. That is intended behaviour for a
- * hardware-attested identity provider; it will surprise you if you expect the
- * token-scoped revocation the RFC describes.
- *
- * Revocation requires client authentication, and a client may only revoke its own
- * tokens. RFC 7009 mandates 200 even for an unknown token, so a non-2xx here means
- * the request itself was malformed.
- */
-async function revokeToken(token) {
-  const response = await fetch(`${issuer}/oauth/revoke`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-    },
-    body: new URLSearchParams({ token, token_type_hint: 'access_token' }),
-  });
-  if (!response.ok) {
-    console.error(`Token revocation failed: ${response.status} ${await response.text()}`);
-  }
-}
-
-/**
  * Sign out.
  *
  * Destroying the local session is not enough -- the user stays signed in at Vouch,
@@ -291,15 +258,11 @@ async function revokeToken(token) {
  * verifies AND post_logout_redirect_uri is registered on the client; otherwise it
  * ends on its own signed-out page rather than following an unvalidated URI.
  *
- * end_session alone is not a complete sign-out, so the access token is revoked
- * first -- see revokeToken above for what that costs on Vouch.
+ * The access token is deliberately not revoked: Vouch revokes by user, not by token,
+ * so revocation would sign the user out of every application and device.
  */
-app.get('/logout', async (req, res) => {
-  const { accessToken, idToken } = req.session.tokens || {};
-
-  if (accessToken) {
-    await revokeToken(accessToken);
-  }
+app.get('/logout', (req, res) => {
+  const { idToken } = req.session.tokens || {};
 
   const endSession = config.serverMetadata().end_session_endpoint;
   const postLogoutRedirectUri = new URL('/', callbackUrl).href;
