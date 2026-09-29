@@ -171,15 +171,17 @@ const SPA_EXAMPLES = [
   },
 ];
 
-/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], extraEnv?: Record<string, string> }>} */
+/** @type {Array<{ name: string, dir: string, type: "native", stdoutMarkers: string[], showsVerificationUriComplete?: boolean, extraEnv?: Record<string, string> }>} */
 const NATIVE_EXAMPLES = [
   {
     name: "native-node",
     dir: "native/node",
     type: "native",
+    showsVerificationUriComplete: true,
     stdoutMarkers: [
       "To sign in, visit:",
       "Enter code:",
+      "Or open:",
       "Authenticated!",
       "Email:",
     ],
@@ -188,9 +190,11 @@ const NATIVE_EXAMPLES = [
     name: "native-python",
     dir: "native/python",
     type: "native",
+    showsVerificationUriComplete: true,
     stdoutMarkers: [
       "To sign in, visit:",
       "Enter code:",
+      "Or open:",
       "Authenticated!",
       "Email:",
     ],
@@ -199,9 +203,11 @@ const NATIVE_EXAMPLES = [
     name: "native-rust",
     dir: "native/rust",
     type: "native",
+    showsVerificationUriComplete: true,
     stdoutMarkers: [
       "To sign in, visit:",
       "Enter code:",
+      "Or open:",
       "Authenticated!",
       "Email:",
     ],

@@ -61,7 +61,12 @@ device_data = response.json()
 
 # Step 2: Display instructions to user
 print(f"\nTo sign in, visit: {device_data['verification_uri']}")
-print(f"Enter code: {device_data['user_code']}\n")
+print(f"Enter code: {device_data['user_code']}")
+# RFC 8628 section 3.3.1: the same page with the code already filled in, for users who
+# can open a link (or scan it as a QR code) rather than type the code.
+if "verification_uri_complete" in device_data:
+    print(f"Or open: {device_data['verification_uri_complete']}")
+print()
 
 # Step 3: Poll for token
 interval = device_data.get("interval", 5)

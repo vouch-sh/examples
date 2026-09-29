@@ -84,7 +84,13 @@ async function deviceFlow() {
 
   // Step 2: Display instructions to user
   console.log(`\nTo sign in, visit: ${deviceData.verification_uri}`);
-  console.log(`Enter code: ${deviceData.user_code}\n`);
+  console.log(`Enter code: ${deviceData.user_code}`);
+  // RFC 8628 section 3.3.1: the same page with the code already filled in, for users who
+  // can open a link (or scan it as a QR code) rather than type the code.
+  if (deviceData.verification_uri_complete) {
+    console.log(`Or open: ${deviceData.verification_uri_complete}`);
+  }
+  console.log();
 
   // Step 3: Poll for token
   let interval = (deviceData.interval || 5) * 1000;

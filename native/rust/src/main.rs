@@ -8,6 +8,7 @@ struct DeviceResponse {
     device_code: String,
     user_code: String,
     verification_uri: String,
+    verification_uri_complete: Option<String>,
     #[allow(dead_code)]
     expires_in: u64,
     interval: Option<u64>,
@@ -100,7 +101,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 2: Display instructions to user
     println!("\nTo sign in, visit: {}", device_response.verification_uri);
-    println!("Enter code: {}\n", device_response.user_code);
+    println!("Enter code: {}", device_response.user_code);
+    // RFC 8628 section 3.3.1: the same page with the code already filled in, for users who
+    // can open a link (or scan it as a QR code) rather than type the code.
+    if let Some(uri) = &device_response.verification_uri_complete {
+        println!("Or open: {uri}");
+    }
+    println!();
 
     // Step 3: Poll for token
     let mut interval = Duration::from_secs(device_response.interval.unwrap_or(5));

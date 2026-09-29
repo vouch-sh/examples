@@ -77,6 +77,17 @@ for (const example of NATIVE_EXAMPLES) {
 
         // Verify the user code has the expected format (XXXX-XXXX)
         expect(userCode).toMatch(/^[A-Z]{4}-[A-Z]{4}$/);
+
+        if (example.showsVerificationUriComplete) {
+          // Vouch builds verification_uri_complete as the verification URI with the
+          // user code as a query parameter.
+          const fullOutput = await handle.waitForOutput("Or open:", 30_000);
+          const completeMatch = fullOutput.match(/Or open:\s*(https?:\/\/\S+)/);
+          expect(completeMatch).toBeTruthy();
+          expect(completeMatch[1]).toBe(
+            `${verificationUrl}?user_code=${userCode}`,
+          );
+        }
       } finally {
         // Kill the container since we can't complete the device flow
         // (requires Google re-authentication which can't be automated)
