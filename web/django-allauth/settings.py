@@ -1,5 +1,4 @@
 import os
-import warnings
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -33,8 +32,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     # Serves collectstatic's output (the admin's CSS and JS); uvicorn does not serve
-    # static files and Django only does so under runserver with DEBUG on.
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    # static files and Django only does so under runserver with DEBUG on. ServeStatic
+    # (a WhiteNoise fork) has a native async path, so it streams under ASGI without
+    # Django falling back to draining a synchronous iterator.
+    "servestatic.middleware.ServeStaticMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -102,17 +103,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    # Hashed, compressed copies, so WhiteNoise can serve them with far-future caching.
+    # Hashed, compressed copies, so ServeStatic can serve them with far-future caching.
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        "BACKEND": "servestatic.storage.CompressedManifestStaticFilesStorage"
     },
 }
-
-# WhiteNoise 6 has no async code path, so under ASGI Django warns on every static file
-# that it is draining WhiteNoise's synchronous file iterator. That is how WhiteNoise
-# works under any ASGI server, not a fault here; silence exactly that warning.
-warnings.filterwarnings(
-    "ignore",
-    message="StreamingHttpResponse must consume synchronous iterators",
-    module="django.core.handlers.asgi",
-)
