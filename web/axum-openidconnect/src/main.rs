@@ -1,6 +1,7 @@
 use axum::{
     extract::{Query, State},
-    response::{Html, IntoResponse, Redirect},
+    http::StatusCode,
+    response::{Html, IntoResponse, Redirect, Response},
     routing::get,
     Router,
 };
@@ -12,10 +13,8 @@ use openidconnect::{
     OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, PostLogoutRedirectUrl,
     ProviderMetadataWithLogout, RedirectUrl, Scope, TokenResponse,
 };
-use serde::Deserialize;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tower_sessions::{MemoryStore, Session, SessionManagerLayer};
+use serde::{Deserialize, Serialize};
+use tower_sessions::{cookie::SameSite, MemoryStore, Session, SessionManagerLayer};
 
 type ConfiguredClient = CoreClient<
     EndpointSet,
@@ -84,8 +83,18 @@ struct AppState {
     // None when the provider does not advertise end_session_endpoint.
     end_session_url: Option<EndSessionUrl>,
     post_logout_redirect_uri: PostLogoutRedirectUrl,
-    // In production, use a proper session store
-    pkce_verifiers: Arc<RwLock<std::collections::HashMap<String, (PkceCodeVerifier, Nonce)>>>,
+}
+
+/// What /login keeps in the browser's session for /callback.
+///
+/// Holding it in the session rather than in a server-wide map keyed by state is what
+/// makes the state check meaningful: the callback only succeeds in the browser that
+/// started the sign-in, which is the login CSRF protection state exists for.
+#[derive(Serialize, Deserialize)]
+struct PendingLogin {
+    csrf_token: CsrfToken,
+    pkce_verifier: PkceCodeVerifier,
+    nonce: Nonce,
 }
 
 #[tokio::main]
@@ -131,11 +140,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         client_id,
         end_session_url,
         post_logout_redirect_uri,
-        pkce_verifiers: Arc::new(RwLock::new(std::collections::HashMap::new())),
     };
 
     let session_store = MemoryStore::default();
-    let session_layer = SessionManagerLayer::new(session_store);
+    // Lax rather than the default Strict: the callback arrives as a top-level
+    // cross-site redirect from Vouch, and it needs the session that /login wrote.
+    let session_layer = SessionManagerLayer::new(session_store).with_same_site(SameSite::Lax);
 
     let app = Router::new()
         .route("/", get(home))
@@ -195,7 +205,7 @@ async fn home(session: Session) -> Html<String> {
     ))
 }
 
-async fn login(State(state): State<AppState>) -> Redirect {
+async fn login(State(state): State<AppState>, session: Session) -> Response {
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, csrf_token, nonce) = state
@@ -209,79 +219,111 @@ async fn login(State(state): State<AppState>) -> Redirect {
         .set_pkce_challenge(pkce_challenge)
         .url();
 
-    state
-        .pkce_verifiers
-        .write()
-        .await
-        .insert(csrf_token.secret().clone(), (pkce_verifier, nonce));
+    let pending = PendingLogin {
+        csrf_token,
+        pkce_verifier,
+        nonce,
+    };
+    if let Err(err) = session.insert("oidc_pending", pending).await {
+        return error_page(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Could not store the sign-in state: {err}"),
+        );
+    }
 
-    Redirect::to(auth_url.as_str())
+    Redirect::to(auth_url.as_str()).into_response()
 }
 
 #[derive(Deserialize)]
 struct CallbackParams {
-    code: String,
-    state: String,
+    code: Option<String>,
+    state: Option<String>,
+    // Set instead of `code` when Vouch ends the authorization with an error
+    // (RFC 6749 section 4.1.2.1), for example when the user denies consent.
+    error: Option<String>,
+    error_description: Option<String>,
 }
 
 async fn callback(
     Query(params): Query<CallbackParams>,
     State(state): State<AppState>,
     session: Session,
-) -> impl IntoResponse {
-    let (pkce_verifier, nonce) = match state.pkce_verifiers.write().await.remove(&params.state) {
-        Some(v) => v,
-        None => return Redirect::to("/").into_response(),
-    };
+) -> Response {
+    match complete_login(params, &state, &session).await {
+        Ok(()) => Redirect::to("/").into_response(),
+        Err((status, message)) => error_page(status, &message),
+    }
+}
 
-    let code_request = match state
+type CallbackError = (StatusCode, String);
+
+fn server_error(context: &str, err: impl std::fmt::Display) -> CallbackError {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("{context}: {err}"),
+    )
+}
+
+async fn complete_login(
+    params: CallbackParams,
+    state: &AppState,
+    session: &Session,
+) -> Result<(), CallbackError> {
+    if let Some(error) = params.error {
+        let description = params.error_description.unwrap_or_default();
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("Vouch returned {error}: {description}"),
+        ));
+    }
+
+    let pending: PendingLogin = session
+        .remove("oidc_pending")
+        .await
+        .map_err(|err| server_error("Could not read the sign-in state", err))?
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "No sign-in is in progress in this browser".to_string(),
+        ))?;
+    if params.state.as_deref() != Some(pending.csrf_token.secret().as_str()) {
+        return Err((StatusCode::BAD_REQUEST, "State mismatch".to_string()));
+    }
+    let code = params.code.ok_or((
+        StatusCode::BAD_REQUEST,
+        "Callback carried no authorization code".to_string(),
+    ))?;
+
+    let token_response = state
         .oidc_client
-        .exchange_code(AuthorizationCode::new(params.code))
-    {
-        Ok(req) => req,
-        Err(_) => return Redirect::to("/").into_response(),
-    };
-
-    let token_response = match code_request
-        .set_pkce_verifier(pkce_verifier)
+        .exchange_code(AuthorizationCode::new(code))
+        .map_err(|err| server_error("Token endpoint is not configured", err))?
+        .set_pkce_verifier(pending.pkce_verifier)
         .request_async(&state.http_client)
         .await
-    {
-        Ok(t) => t,
-        Err(_) => return Redirect::to("/").into_response(),
-    };
+        .map_err(|err| server_error("Token exchange failed", err))?;
 
-    let id_token = match token_response.id_token() {
-        Some(t) => t,
-        None => return Redirect::to("/").into_response(),
-    };
+    let id_token = token_response.id_token().ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Token response carried no ID token".to_string(),
+    ))?;
 
-    let claims = match id_token.claims(&state.oidc_client.id_token_verifier(), &nonce) {
-        Ok(c) => c,
-        Err(_) => return Redirect::to("/").into_response(),
-    };
+    let claims = id_token
+        .claims(&state.oidc_client.id_token_verifier(), &pending.nonce)
+        .map_err(|err| server_error("ID token verification failed", err))?;
 
     let email = claims
         .email()
         .map(|e| e.as_str().to_string())
         .unwrap_or_default();
 
-    let at_claims = match verify_access_token(
+    let at_claims = verify_access_token(
         &state.http_client,
         &state.issuer,
         &state.client_id,
         token_response.access_token().secret(),
     )
     .await
-    {
-        Ok(at_claims) => at_claims,
-        Err(err) => {
-            return Html(format!(
-                "<h1>Access token verification failed</h1><p>{err}</p>"
-            ))
-            .into_response()
-        }
-    };
+    .map_err(|err| server_error("Access token verification failed", err))?;
 
     let user = serde_json::json!({
         "email": email,
@@ -295,12 +337,35 @@ async fn callback(
         "hardware_verified": at_claims.hardware_verified,
     });
 
-    let _ = session.insert("user", user).await;
+    session
+        .insert("user", user)
+        .await
+        .map_err(|err| server_error("Could not store the session", err))?;
     // Kept for RP-initiated logout: Vouch only honours post_logout_redirect_uri when a
     // verified id_token_hint identifies the client.
-    let _ = session.insert("id_token", id_token).await;
+    session
+        .insert("id_token", id_token)
+        .await
+        .map_err(|err| server_error("Could not store the session", err))?;
 
-    Redirect::to("/").into_response()
+    Ok(())
+}
+
+fn error_page(status: StatusCode, message: &str) -> Response {
+    // The message can include Vouch's error_description, so escape it.
+    let message = message
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;");
+    (
+        status,
+        Html(format!(
+            "<!DOCTYPE html><html><head><title>Vouch + Axum</title></head>\
+             <body><h1>Sign-in failed</h1><p>{message}</p><a href=\"/\">Back</a></body></html>"
+        )),
+    )
+        .into_response()
 }
 
 /// Sign out locally, then at Vouch (OIDC RP-Initiated Logout 1.0).
