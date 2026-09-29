@@ -4,6 +4,7 @@ import time
 
 import jwt
 import requests
+from cryptography.hazmat.primitives.asymmetric import ec
 from jwt import PyJWKClient
 
 VOUCH_ISSUER = os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh")
@@ -26,14 +27,24 @@ def verify_access_token(token):
     is an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload --
     an agent that acts on an unverified claim is acting on whatever it was handed.
     """
-    if jwt.get_unverified_header(token).get("typ", "").lower() != "at+jwt":
-        raise ValueError("not an RFC 9068 access token")
+    header = jwt.get_unverified_header(token)
+    if str(header.get("typ")).lower() != "at+jwt":
+        raise jwt.InvalidTokenError(f"unexpected token typ: {header.get('typ')}")
+    # Vouch signs access tokens with ES256 only. Pin it rather than trusting the header,
+    # which is attacker-controlled until the signature has been checked.
+    if header.get("alg") != "ES256":
+        raise jwt.InvalidAlgorithmError(f"unexpected token alg: {header.get('alg')}")
     signing_key = jwks_client.get_signing_key_from_jwt(token)
+    # PyJWT reports a non-EC key under ES256 as a TypeError from deep inside decode.
+    # Require a P-256 key here so it is rejected like any other verification failure.
+    if not (
+        isinstance(signing_key.key, ec.EllipticCurvePublicKey)
+        and isinstance(signing_key.key.curve, ec.SECP256R1)
+    ):
+        raise jwt.InvalidKeyError(f"kid {signing_key.key_id} is not a P-256 key")
     return jwt.decode(
         token,
         signing_key.key,
-        # Vouch signs access tokens with ES256 only. Pin it rather than taking the
-        # algorithm from the JWK or the token header.
         algorithms=["ES256"],
         issuer=VOUCH_ISSUER,
         audience=CLIENT_ID,
@@ -143,7 +154,6 @@ def device_flow():
 if __name__ == "__main__":
     try:
         device_flow()
-    # ValueError covers a malformed JSON body and the typ check in verify_access_token.
-    except (RuntimeError, ValueError, requests.RequestException, jwt.PyJWTError) as err:
+    except (RuntimeError, requests.RequestException, jwt.PyJWTError) as err:
         print(f"Error: {err}", file=sys.stderr)
         sys.exit(1)

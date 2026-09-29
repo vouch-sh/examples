@@ -1,4 +1,8 @@
-use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{
+    decode, decode_header,
+    jwk::{AlgorithmParameters, EllipticCurve, JwkSet},
+    Algorithm, DecodingKey, Validation,
+};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
@@ -57,7 +61,12 @@ async fn verify_access_token(
     // are not bearer credentials.
     match header.typ.as_deref() {
         Some(typ) if typ.eq_ignore_ascii_case("at+jwt") => {}
-        other => return Err(format!("unexpected token typ: {other:?}").into()),
+        other => return Err(format!("unexpected token typ: {}", other.unwrap_or_default()).into()),
+    }
+    // Vouch signs access tokens with ES256 only. Pin it rather than trusting the header,
+    // which is attacker-controlled until the signature has been checked.
+    if header.alg != Algorithm::ES256 {
+        return Err(format!("unexpected token alg: {:?}", header.alg).into());
     }
 
     let kid = header.kid.ok_or("access token has no kid")?;
@@ -68,9 +77,13 @@ async fn verify_access_token(
         .json()
         .await?;
     let jwk = jwks.find(&kid).ok_or("kid not published in JWKS")?;
+    // An RSA or other-curve key under this kid is rejected by decode too, but only with an
+    // opaque InvalidKeyFormat; say which key was wrong.
+    match &jwk.algorithm {
+        AlgorithmParameters::EllipticCurve(params) if params.curve == EllipticCurve::P256 => {}
+        _ => return Err(format!("kid {kid} is not a P-256 key").into()),
+    }
 
-    // Vouch signs access tokens with ES256 only. Pin it rather than taking header.alg,
-    // which is attacker-controlled until the signature has been checked.
     let mut validation = Validation::new(Algorithm::ES256);
     validation.set_audience(&[client_id]);
     validation.set_issuer(&[issuer]);
