@@ -35,19 +35,28 @@ export default NextAuth({
     },
   }],
   callbacks: {
-    async jwt({ token, account }) {
+    // `account` and `profile` are only present on sign-in. With `idToken: true`,
+    // `profile` holds the claims of the ID token NextAuth has already verified.
+    async jwt({ token, account, profile }) {
       if (account?.access_token) {
         const atClaims = await verifyAccessToken(account.access_token);
+        token.emailVerified = profile.email_verified || false;
+        token.acr = profile.acr || null;
+        token.amr = profile.amr || [];
         token.hardwareVerified = atClaims.hardware_verified || false;
-        token.acr = atClaims.acr || null;
-        token.amr = atClaims.amr || [];
+        // Kept for RP-initiated logout (pages/api/logout.js): Vouch only honours
+        // post_logout_redirect_uri when a verified id_token_hint identifies the client.
+        // It stays in the encrypted JWT cookie and is not copied to the session below.
+        token.idToken = account.id_token;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.hardwareVerified = token.hardwareVerified;
+      session.user.sub = token.sub;
+      session.user.emailVerified = token.emailVerified;
       session.user.acr = token.acr;
       session.user.amr = token.amr;
+      session.user.hardwareVerified = token.hardwareVerified;
       return session;
     },
   },
