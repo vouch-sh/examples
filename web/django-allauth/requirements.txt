@@ -42,3 +42,5 @@ urllib3==2.7.0
     # via requests
 uvicorn==0.54.0
     # via -r requirements.in
+whitenoise==6.12.0
+    # via -r requirements.in
