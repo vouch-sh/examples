@@ -19,4 +19,6 @@ RUN touch database/database.sqlite
 
 EXPOSE 3000
 RUN echo "variables_order = EGPCS" > /usr/local/etc/php/conf.d/env.ini
-CMD ["php", "-S", "0.0.0.0:3000", "-t", "public"]
+# PHP bootstraps Laravel per request, so the only place to refuse to start without
+# APP_KEY (sessions and cookies are encrypted with it) is before the server launches.
+CMD ["sh", "-c", "[ -n \"$APP_KEY\" ] || { echo 'APP_KEY is required' >&2; exit 1; }; exec php -S 0.0.0.0:3000 -t public"]

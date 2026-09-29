@@ -11,7 +11,7 @@ Set the following environment variables:
 - `VOUCH_ISSUER` -- OpenID Connect issuer URL (default: `https://us.vouch.sh`)
 - `VOUCH_CLIENT_ID` -- OAuth 2.0 client ID
 - `VOUCH_CLIENT_SECRET` -- OAuth 2.0 client secret
-- `SECRET_KEY` -- Django secret key. Required; generate one with `openssl rand -hex 32`
+- `SECRET_KEY` -- Django secret key. Required: the app refuses to start without it. Generate one with `openssl rand -hex 32`
 - `VOUCH_REDIRECT_URI` -- Redirect URI (default: `http://localhost:3000/accounts/oidc/vouch/login/callback/`)
 - `DEBUG` -- `true` to enable Django's debug mode (default: off)
 - `ALLOWED_HOSTS` -- Comma-separated host names the app serves (default: `.localhost,127.0.0.1,[::1]`)

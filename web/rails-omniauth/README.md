@@ -13,6 +13,7 @@ This example demonstrates how to authenticate users with Vouch OIDC using Rails 
 | `VOUCH_ISSUER` | OIDC issuer URL (default: `https://us.vouch.sh`) |
 | `VOUCH_CLIENT_ID` | OAuth 2.0 client ID |
 | `VOUCH_CLIENT_SECRET` | OAuth 2.0 client secret |
+| `SECRET_KEY_BASE` | Rails secret for signing and encrypting the session cookie. Required: the app refuses to start without it. Generate one with `openssl rand -hex 64` |
 | `VOUCH_REDIRECT_URI` | Callback URL (default: `http://localhost:3000/auth/vouch/callback`) |
 
 ## Quick Start
@@ -30,6 +31,7 @@ docker run -p 3000:3000 \
   -e VOUCH_ISSUER="https://us.vouch.sh" \
   -e VOUCH_CLIENT_ID="your-client-id" \
   -e VOUCH_CLIENT_SECRET="your-client-secret" \
+  -e SECRET_KEY_BASE="$(openssl rand -hex 64)" \
   -e VOUCH_REDIRECT_URI="http://localhost:3000/auth/vouch/callback" \
   rails-omniauth
 ```

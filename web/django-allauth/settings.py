@@ -2,11 +2,15 @@ import os
 import warnings
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent
 # No fallback: a default key baked into the source lets anyone forge sessions for
-# every deployment that forgot to set one. Left empty, Django refuses to use it
-# (ImproperlyConfigured) while still allowing the build-time `migrate`.
-SECRET_KEY = os.environ.get("SECRET_KEY", "")
+# every deployment that forgot to set one. The Dockerfile's build steps pass a
+# build-only key that never reaches the running container.
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured("SECRET_KEY is required")
 # Off unless asked for: debug pages expose settings and stack traces.
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 # Comma-separated. The default is what Django itself allows in development.

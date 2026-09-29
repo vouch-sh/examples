@@ -48,7 +48,9 @@ for (const example of WEB_EXAMPLES) {
         VOUCH_REDIRECT_URI: callbackUrl,
         // Session secrets have no built-in default; the examples refuse to run
         // without one. SECRET_KEY: Express, Flask, FastAPI, Django. APP_KEY: Laravel.
+        // SECRET_KEY_BASE: Rails.
         SECRET_KEY: crypto.randomBytes(32).toString("hex"),
+        SECRET_KEY_BASE: crypto.randomBytes(64).toString("hex"),
         APP_KEY: `base64:${crypto.randomBytes(32).toString("base64")}`,
         ...(example.extraEnv ? example.extraEnv(baseUrl) : {}),
       };
