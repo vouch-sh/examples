@@ -43,6 +43,7 @@ struct AccessTokenClaims {
 async fn verify_access_token(
     http_client: &reqwest::Client,
     issuer: &str,
+    jwks_uri: &str,
     client_id: &str,
     token: &str,
 ) -> Result<AccessTokenClaims, Box<dyn std::error::Error>> {
@@ -56,12 +57,7 @@ async fn verify_access_token(
     }
 
     let kid = header.kid.ok_or("access token has no kid")?;
-    let jwks: JwkSet = http_client
-        .get(format!("{issuer}/oauth/jwks"))
-        .send()
-        .await?
-        .json()
-        .await?;
+    let jwks: JwkSet = http_client.get(jwks_uri).send().await?.json().await?;
     let jwk = jwks.find(&kid).ok_or("kid not published in JWKS")?;
 
     let mut validation = Validation::new(header.alg);
@@ -79,6 +75,8 @@ struct AppState {
     oidc_client: ConfiguredClient,
     http_client: reqwest::Client,
     issuer: String,
+    // From discovery rather than assumed from the issuer's URL layout.
+    jwks_uri: String,
     client_id: String,
     // None when the provider does not advertise end_session_endpoint.
     end_session_url: Option<EndSessionUrl>,
@@ -111,6 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // RP-Initiated Logout 1.0), which the core metadata type ignores.
     let provider_metadata =
         ProviderMetadataWithLogout::discover_async(issuer_url, &http_client).await?;
+    let jwks_uri = provider_metadata.jwks_uri().url().to_string();
     let end_session_url = provider_metadata
         .additional_metadata()
         .end_session_endpoint
@@ -137,6 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oidc_client,
         http_client,
         issuer,
+        jwks_uri,
         client_id,
         end_session_url,
         post_logout_redirect_uri,
@@ -319,6 +319,7 @@ async fn complete_login(
     let at_claims = verify_access_token(
         &state.http_client,
         &state.issuer,
+        &state.jwks_uri,
         &state.client_id,
         token_response.access_token().secret(),
     )

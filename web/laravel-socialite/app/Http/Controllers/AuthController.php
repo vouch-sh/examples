@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Laravel\Socialite\Facades\Socialite;
 use SocialiteProviders\Manager\Config;
 
@@ -76,7 +75,7 @@ class AuthController extends \Illuminate\Routing\Controller
         $provider = $this->vouch()->enablePKCE();
         $vouchUser = $provider->user();
 
-        $claims = $this->verifyAccessToken($vouchUser->token);
+        $claims = $this->verifyAccessToken($vouchUser->token, $provider->jwks());
         // The raw user is the ID token payload.
         $idClaims = $vouchUser->getRaw();
 
@@ -105,7 +104,7 @@ class AuthController extends \Illuminate\Routing\Controller
      * The audience is this client's own client_id, which is what Vouch issues when the
      * authorization request carries no RFC 8707 resource parameter.
      */
-    private function verifyAccessToken(string $token): array
+    private function verifyAccessToken(string $token, array $jwks): array
     {
         $issuer = rtrim(config('services.oidc.base_url'), '/');
 
@@ -116,9 +115,6 @@ class AuthController extends \Illuminate\Routing\Controller
             abort(500, 'Not an RFC 9068 access token');
         }
 
-        // Refetched per login to keep the example short. A real app should cache this
-        // and only refetch when it encounters an unknown `kid`.
-        $jwks = Http::get($issuer . '/oauth/jwks')->throw()->json();
         $claims = (array) JWT::decode($token, JWK::parseKeySet($jwks));
 
         if (($claims['iss'] ?? null) !== $issuer) {

@@ -43,6 +43,14 @@ class VouchOidcProvider extends Provider
         return $payload;
     }
 
+    /**
+     * Vouch's JWKS, located through discovery and cached like the provider's own.
+     */
+    public function jwks(): array
+    {
+        return $this->getJwks();
+    }
+
     public function endSessionEndpoint(): ?string
     {
         return $this->getOpenIdConfig()['end_session_endpoint'] ?? null;

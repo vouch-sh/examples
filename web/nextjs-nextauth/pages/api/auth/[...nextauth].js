@@ -2,13 +2,26 @@ import NextAuth from 'next-auth';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const issuer = process.env.VOUCH_ISSUER || 'https://us.vouch.sh';
-const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
+const wellKnown = `${issuer}/.well-known/openid-configuration`;
+
+// The JWKS location comes from discovery, fetched once on first use.
+let jwks;
+async function getJwks() {
+  if (!jwks) {
+    const discovery = await fetch(wellKnown);
+    if (!discovery.ok) {
+      throw new Error(`Discovery failed: ${discovery.status}`);
+    }
+    jwks = createRemoteJWKSet(new URL((await discovery.json()).jwks_uri));
+  }
+  return jwks;
+}
 
 // hardware_verified is only in the access token, not the id_token. The access token is
 // an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload -- an
 // unverified decode trusts whatever bytes you were handed.
 async function verifyAccessToken(token) {
-  const { payload } = await jwtVerify(token, JWKS, {
+  const { payload } = await jwtVerify(token, await getJwks(), {
     issuer,
     audience: process.env.VOUCH_CLIENT_ID,
     typ: 'at+jwt',
@@ -21,7 +34,7 @@ export default NextAuth({
     id: 'vouch',
     name: 'Vouch',
     type: 'oauth',
-    wellKnown: `${issuer}/.well-known/openid-configuration`,
+    wellKnown,
     clientId: process.env.VOUCH_CLIENT_ID,
     clientSecret: process.env.VOUCH_CLIENT_SECRET,
     authorization: { params: { scope: 'openid email' } },

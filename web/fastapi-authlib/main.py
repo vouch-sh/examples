@@ -1,3 +1,4 @@
+import functools
 import os
 from html import escape
 from urllib.parse import urlencode, urljoin
@@ -11,8 +12,6 @@ from starlette.middleware.sessions import SessionMiddleware
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
-
-jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
 # No fallback: a default secret baked into the source lets anyone forge session
 # cookies for every deployment that forgot to set one.
@@ -33,7 +32,13 @@ oauth.register(
     code_challenge_method='S256',
 )
 
-def verify_access_token(token):
+@functools.cache
+def jwks_client(jwks_uri):
+    """One PyJWKClient per JWKS URI, so its key cache survives between logins."""
+    return PyJWKClient(jwks_uri)
+
+
+def verify_access_token(token, jwks_uri):
     """Verify the access token and return its claims.
 
     hardware_verified is only in the access token, not the id_token. The access token
@@ -42,7 +47,7 @@ def verify_access_token(token):
     """
     if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
         raise ValueError('not an RFC 9068 access token')
-    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    signing_key = jwks_client(jwks_uri).get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
         signing_key.key,
@@ -97,7 +102,8 @@ async def callback(request: Request):
     token = await oauth.vouch.authorize_access_token(request)
     # Authlib has already verified the ID token; 'userinfo' holds its claims.
     id_claims = token.get('userinfo')
-    at_claims = verify_access_token(token['access_token'])
+    metadata = await oauth.vouch.load_server_metadata()
+    at_claims = verify_access_token(token['access_token'], metadata['jwks_uri'])
     request.session['user'] = {
         'email': id_claims.get('email'),
         'email_verified': id_claims.get('email_verified', False),

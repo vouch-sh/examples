@@ -25,7 +25,7 @@ app.use(session({
   saveUninitialized: false,
 }));
 
-const JWKS = createRemoteJWKSet(new URL(`${issuer}/oauth/jwks`));
+const JWKS = createRemoteJWKSet(new URL(config.serverMetadata().jwks_uri));
 
 // hardware_verified is only in the access token, not the id_token. The access token
 // is an ES256-signed RFC 9068 JWT, so verify it rather than decoding the payload --
@@ -200,7 +200,7 @@ app.get('/protected', requireAuth, (req, res) => {
 app.get('/userinfo', requireAuth, async (req, res) => {
   try {
     const { accessToken } = req.session.tokens;
-    const response = await fetch(`${issuer}/oauth/userinfo`, {
+    const response = await fetch(config.serverMetadata().userinfo_endpoint, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
@@ -234,7 +234,7 @@ app.get('/introspect', requireAuth, async (req, res) => {
       client_secret: clientSecret,
     });
 
-    const response = await fetch(`${issuer}/oauth/introspect`, {
+    const response = await fetch(config.serverMetadata().introspection_endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params,

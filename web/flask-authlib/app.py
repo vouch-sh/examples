@@ -1,3 +1,4 @@
+import functools
 import json
 import os
 from urllib.parse import urlencode, urljoin
@@ -17,8 +18,6 @@ if not app.secret_key:
 
 VOUCH_ISSUER = os.environ.get('VOUCH_ISSUER', 'https://us.vouch.sh')
 VOUCH_CLIENT_ID = os.environ.get('VOUCH_CLIENT_ID')
-
-jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
 
 oauth = OAuth(app)
 oauth.register(
@@ -89,6 +88,12 @@ PROTECTED_DENIED_TEMPLATE = """
 </html>
 """
 
+@functools.cache
+def jwks_client(jwks_uri):
+    """One PyJWKClient per JWKS URI, so its key cache survives between logins."""
+    return PyJWKClient(jwks_uri)
+
+
 def verify_access_token(token):
     """Verify the access token and return its claims.
 
@@ -101,7 +106,8 @@ def verify_access_token(token):
     """
     if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
         raise ValueError('not an RFC 9068 access token')
-    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    jwks_uri = oauth.vouch.load_server_metadata()['jwks_uri']
+    signing_key = jwks_client(jwks_uri).get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
         signing_key.key,
@@ -180,7 +186,7 @@ def userinfo():
         return redirect('/login')
 
     resp = http_requests.get(
-        f'{VOUCH_ISSUER}/oauth/userinfo',
+        oauth.vouch.load_server_metadata()['userinfo_endpoint'],
         headers={'Authorization': f'Bearer {tokens["access_token"]}'},
         timeout=10,
     )

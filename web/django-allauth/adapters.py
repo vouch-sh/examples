@@ -1,3 +1,4 @@
+import functools
 import os
 from urllib.parse import urlencode, urlsplit
 
@@ -15,10 +16,14 @@ VOUCH_REDIRECT_URI = os.environ.get(
     'VOUCH_REDIRECT_URI', 'http://localhost:3000/accounts/oidc/vouch/login/callback/'
 )
 
-jwks_client = PyJWKClient(f'{VOUCH_ISSUER}/oauth/jwks')
+
+@functools.cache
+def jwks_client(jwks_uri):
+    """One PyJWKClient per JWKS URI, so its key cache survives between logins."""
+    return PyJWKClient(jwks_uri)
 
 
-def verify_access_token(token):
+def verify_access_token(token, jwks_uri):
     """Verify the access token and return its claims.
 
     hardware_verified is only in the access token, not the id_token. The access token
@@ -30,7 +35,7 @@ def verify_access_token(token):
     """
     if jwt.get_unverified_header(token).get('typ', '').lower() != 'at+jwt':
         raise ValueError('not an RFC 9068 access token')
-    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    signing_key = jwks_client(jwks_uri).get_signing_key_from_jwt(token)
     return jwt.decode(
         token,
         signing_key.key,
@@ -69,7 +74,7 @@ class VouchOIDCAdapter(OpenIDConnectOAuth2Adapter):
 
     def complete_login(self, request, app, token, **kwargs):
         sociallogin = super().complete_login(request, app, token, **kwargs)
-        at_claims = verify_access_token(token.token)
+        at_claims = verify_access_token(token.token, self.openid_config['jwks_uri'])
         request.session['vouch_hardware_verified'] = at_claims.get('hardware_verified', False)
         request.session['vouch_id_token'] = kwargs['response'].get('id_token')
         return sociallogin
