@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { getUser, login, logout } from './auth';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { userManager, getUser, login, logout } from './auth';
 
 // Display only -- never an authorization decision.
 //
@@ -21,10 +21,18 @@ const hardwareVerified = computed(() => {
   return decodeUnverifiedForDisplay(user.value.access_token).hardware_verified || false;
 });
 
+async function onExpired() {
+  await userManager.removeUser();
+  user.value = null;
+}
+
 onMounted(async () => {
+  userManager.events.addAccessTokenExpired(onExpired);
   user.value = await getUser();
   isLoading.value = false;
 });
+
+onUnmounted(() => userManager.events.removeAccessTokenExpired(onExpired));
 </script>
 
 <template>

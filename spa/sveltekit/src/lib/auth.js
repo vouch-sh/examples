@@ -6,6 +6,8 @@ const config = {
   redirect_uri: '__VOUCH_REDIRECT_URI__',
   post_logout_redirect_uri: typeof window !== 'undefined' ? window.location.origin : '',
   scope: 'openid email',
+  // Vouch never issues refresh tokens, so silent renew can only fail; sign in again on expiry.
+  automaticSilentRenew: false,
   userStore: typeof window !== 'undefined'
     ? new WebStorageStateStore({ store: window.sessionStorage })
     : undefined,
@@ -14,7 +16,8 @@ const config = {
 export const userManager = typeof window !== 'undefined' ? new UserManager(config) : null;
 
 export async function getUser() {
-  return userManager ? await userManager.getUser() : null;
+  const user = userManager ? await userManager.getUser() : null;
+  return user && !user.expired ? user : null;
 }
 
 export async function login() {

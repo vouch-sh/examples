@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { getUser, login, logout } from '$lib/auth';
+  import { userManager, getUser, login, logout } from '$lib/auth';
 
   // Display only -- never an authorization decision.
   //
@@ -20,9 +20,16 @@
     user?.access_token ? decodeUnverifiedForDisplay(user.access_token).hardware_verified || false : false
   );
 
-  onMount(async () => {
-    user = await getUser();
-    loading = false;
+  onMount(() => {
+    const unsubscribe = userManager.events.addAccessTokenExpired(async () => {
+      await userManager.removeUser();
+      user = null;
+    });
+    getUser().then((u) => {
+      user = u;
+      loading = false;
+    });
+    return unsubscribe;
   });
 </script>
 

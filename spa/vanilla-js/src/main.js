@@ -18,12 +18,19 @@ const config = {
   redirect_uri: '__VOUCH_REDIRECT_URI__',
   post_logout_redirect_uri: window.location.origin,
   scope: 'openid email',
+  // Vouch never issues refresh tokens, so silent renew can only fail; sign in again on expiry.
+  automaticSilentRenew: false,
 };
 
 const userManager = new UserManager(config);
 
+userManager.events.addAccessTokenExpired(() => {
+  userManager.removeUser().then(() => checkAuth());
+});
+
 async function checkAuth() {
-  const user = await userManager.getUser();
+  const stored = await userManager.getUser();
+  const user = stored && !stored.expired ? stored : null;
   const el = document.getElementById('user-info');
 
   if (user) {
