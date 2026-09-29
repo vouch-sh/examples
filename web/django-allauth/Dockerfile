@@ -10,4 +10,5 @@ COPY . .
 RUN python manage.py migrate --run-syncdb
 
 EXPOSE 3000
-CMD ["python", "manage.py", "runserver", "0.0.0.0:3000"]
+# runserver is a development server; uvicorn serves the ASGI app.
+CMD ["uvicorn", "asgi:application", "--host", "0.0.0.0", "--port", "3000"]
