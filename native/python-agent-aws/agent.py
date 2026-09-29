@@ -11,21 +11,6 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from vouch_client import VouchError, VouchSession
 
-VOUCH_ISSUER = os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh")
-AWS_ROLE_ARN = os.environ.get("AWS_ROLE_ARN")
-# boto3 only reads AWS_DEFAULT_REGION on its own; without an explicit region
-# STS falls back to the legacy global endpoint, which exists only in the
-# commercial partition.
-AWS_REGION = os.environ.get("AWS_REGION")
-
-if not AWS_ROLE_ARN:
-    print("Error: AWS_ROLE_ARN environment variable is required")
-    sys.exit(1)
-
-if not AWS_REGION:
-    print("Error: AWS_REGION environment variable is required")
-    sys.exit(1)
-
 
 def token_issuer(id_token: str) -> str:
     """The ``iss`` of a JWT, read without verification (AWS verifies it)."""
@@ -34,15 +19,15 @@ def token_issuer(id_token: str) -> str:
     return claims["iss"]
 
 
-def main() -> None:
+def broker(issuer: str, role_arn: str, region: str) -> None:
     """Sign in, obtain an AWS ID token from Vouch, and exchange it at STS."""
-    vouch = VouchSession(VOUCH_ISSUER, "vouch-python-agent-aws")
+    vouch = VouchSession(issuer, "vouch-python-agent-aws")
     vouch.login()
 
     # Step 1: Get an AWS-specific ID token from Vouch, pinned to the role we
     # are about to assume so STS refuses it for any other role.
     print("\n--- Vouch AWS Credential Brokering ---")
-    aws_data = vouch.get("/v1/credentials/aws/token", params={"role_arn": AWS_ROLE_ARN})
+    aws_data = vouch.get("/v1/credentials/aws/token", params={"role_arn": role_arn})
     aws_id_token = aws_data["id_token"]
     print(f"AWS ID token: {aws_id_token[:20]}...")
     # Vouch issues AWS tokens under the organization's own issuer subdomain
@@ -56,10 +41,10 @@ def main() -> None:
     # vars, instance profiles, etc.). AssumeRoleWithWebIdentity authenticates
     # solely via the web identity token.
     sts = boto3.client(
-        "sts", region_name=AWS_REGION, config=Config(signature_version=UNSIGNED)
+        "sts", region_name=region, config=Config(signature_version=UNSIGNED)
     )
     sts_response = sts.assume_role_with_web_identity(
-        RoleArn=AWS_ROLE_ARN,
+        RoleArn=role_arn,
         RoleSessionName="vouch-agent",
         WebIdentityToken=aws_id_token,
     )
@@ -71,7 +56,7 @@ def main() -> None:
     print("\n--- S3 Buckets ---")
     s3 = boto3.client(
         "s3",
-        region_name=AWS_REGION,
+        region_name=region,
         aws_access_key_id=credentials["AccessKeyId"],
         aws_secret_access_key=credentials["SecretAccessKey"],
         aws_session_token=credentials["SessionToken"],
@@ -83,11 +68,30 @@ def main() -> None:
         print("  (no buckets found)")
 
 
-try:
-    main()
-except VouchError as exc:
-    print(f"Error: {exc}")
-    sys.exit(1)
-except (BotoCoreError, ClientError) as exc:
-    print(f"AWS error: {exc}")
-    sys.exit(1)
+def main() -> int:
+    """Read the configuration and run the agent; returns the exit status."""
+    role_arn = os.environ.get("AWS_ROLE_ARN")
+    # boto3 only reads AWS_DEFAULT_REGION on its own; without an explicit
+    # region STS falls back to the legacy global endpoint, which exists only
+    # in the commercial partition.
+    region = os.environ.get("AWS_REGION")
+    if not role_arn:
+        print("Error: AWS_ROLE_ARN environment variable is required")
+        return 1
+    if not region:
+        print("Error: AWS_REGION environment variable is required")
+        return 1
+    try:
+        broker(os.environ.get("VOUCH_ISSUER", "https://us.vouch.sh"), role_arn, region)
+    except VouchError as exc:
+        print(f"Error: {exc}")
+        return 1
+    except (BotoCoreError, ClientError) as exc:
+        print(f"AWS error: {exc}")
+        return 1
+    return 0
+
+
+# Guarded so importing the module (as the smoke test does) makes no network calls.
+if __name__ == "__main__":
+    sys.exit(main())

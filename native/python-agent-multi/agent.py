@@ -28,10 +28,6 @@ GITHUB_UNAVAILABLE = {
     "org_required": "GitHub brokering requires organization membership",
 }
 
-if AWS_ROLE_ARN and not AWS_REGION:
-    print("Error: AWS_REGION environment variable is required when AWS_ROLE_ARN is set")
-    sys.exit(1)
-
 
 def aws_credentials(vouch: VouchSession) -> None:
     """Exchange a Vouch-issued AWS ID token for temporary credentials."""
@@ -100,20 +96,28 @@ def ssh_certificate(vouch: VouchSession) -> None:
     print(f"Valid for: {ssh_data['valid_for_seconds']}s (until about {valid_until})")
 
 
-def main() -> None:
-    """Sign in once, then broker each credential type."""
-    vouch = VouchSession(VOUCH_ISSUER, "vouch-python-agent-multi")
-    vouch.login()
-    aws_credentials(vouch)
-    github_token(vouch)
-    ssh_certificate(vouch)
+def main() -> int:
+    """Sign in once, then broker each credential type; returns the exit status."""
+    if AWS_ROLE_ARN and not AWS_REGION:
+        print(
+            "Error: AWS_REGION environment variable is required when AWS_ROLE_ARN is set"
+        )
+        return 1
+    try:
+        vouch = VouchSession(VOUCH_ISSUER, "vouch-python-agent-multi")
+        vouch.login()
+        aws_credentials(vouch)
+        github_token(vouch)
+        ssh_certificate(vouch)
+    except VouchError as exc:
+        print(f"Error: {exc}")
+        return 1
+    except (BotoCoreError, ClientError) as exc:
+        print(f"AWS error: {exc}")
+        return 1
+    return 0
 
 
-try:
-    main()
-except VouchError as exc:
-    print(f"Error: {exc}")
-    sys.exit(1)
-except (BotoCoreError, ClientError) as exc:
-    print(f"AWS error: {exc}")
-    sys.exit(1)
+# Guarded so importing the module (as the smoke test does) makes no network calls.
+if __name__ == "__main__":
+    sys.exit(main())
