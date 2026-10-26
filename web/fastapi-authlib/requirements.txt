@@ -10,11 +10,11 @@ anyio==4.15.1
     #   starlette
 authlib==1.8.0
     # via -r requirements.in
-certifi==2026.7.22
+certifi==2026.10.19
     # via
     #   httpcore
     #   httpx
-cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+cffi==2.1.1
     # via cryptography
 click==8.5.0
     # via uvicorn
@@ -41,7 +41,7 @@ itsdangerous==2.2.0
     # via -r requirements.in
 joserfc==1.7.5
     # via authlib
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.0
     # via cffi
 pydantic==2.13.5
     # via fastapi
