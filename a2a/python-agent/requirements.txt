@@ -49,7 +49,7 @@ idna==3.20
     #   requests
 json-rpc==1.15.0
     # via a2a-sdk
-opentelemetry-api==1.45.0
+opentelemetry-api==1.45.1
     # via google-api-core
 packaging==26.3
     # via a2a-sdk
