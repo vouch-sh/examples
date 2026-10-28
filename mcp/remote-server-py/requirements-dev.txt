@@ -16,7 +16,7 @@ attrs==26.1.0
     #   -c requirements.txt
     #   jsonschema
     #   referencing
-cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+cffi==2.1.1
     # via
     #   -c requirements.txt
     #   cryptography
@@ -24,8 +24,6 @@ click==8.5.0
     # via
     #   -c requirements.txt
     #   uvicorn
-colorama==0.4.6 ; sys_platform == 'win32'
-    # via pytest
 cryptography==50.0.1
     # via
     #   -c requirements.txt
@@ -36,7 +34,7 @@ h11==0.16.0
     #   -c requirements.txt
     #   httpcore2
     #   uvicorn
-httpcore2==2.13.1 ; sys_platform != 'emscripten'
+httpcore2==2.13.1
     # via
     #   -c requirements.txt
     #   httpx2
@@ -45,10 +43,6 @@ httpx2==2.13.1
     #   -c requirements.txt
     #   -r requirements-dev.in
     #   mcp
-httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
-    # via
-    #   -c requirements.txt
-    #   httpx2
 idna==3.20
     # via
     #   -c requirements.txt
@@ -72,7 +66,7 @@ mcp-types==2.2.0
     # via
     #   -c requirements.txt
     #   mcp
-opentelemetry-api==1.45.0
+opentelemetry-api==1.45.1
     # via
     #   -c requirements.txt
     #   mcp
@@ -80,7 +74,7 @@ packaging==26.3
     # via pytest
 pluggy==1.6.0
     # via pytest
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.0
     # via
     #   -c requirements.txt
     #   cffi
@@ -96,7 +90,7 @@ pydantic-core==2.46.5
     #   pydantic
 pygments==2.21.0
     # via pytest
-pyjwt==2.15.1
+pyjwt[crypto]==2.15.1
     # via
     #   -c requirements.txt
     #   -r requirements.in
@@ -104,10 +98,6 @@ pyjwt==2.15.1
 pytest==9.1.1
     # via -r requirements-dev.in
 python-multipart==0.0.32
-    # via
-    #   -c requirements.txt
-    #   mcp
-pywin32==312 ; sys_platform == 'win32'
     # via
     #   -c requirements.txt
     #   mcp
@@ -130,7 +120,7 @@ starlette==1.7.0
     #   -c requirements.txt
     #   mcp
     #   sse-starlette
-truststore==0.10.4 ; sys_platform != 'emscripten'
+truststore==0.10.4
     # via
     #   -c requirements.txt
     #   httpcore2
