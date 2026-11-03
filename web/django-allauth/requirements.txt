@@ -5,9 +5,9 @@ asgiref==3.12.1
     #   django
     #   django-allauth
     #   servestatic
-certifi==2026.7.22
+certifi==2026.10.18
     # via requests
-cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+cffi==2.1.1
     # via cryptography
 charset-normalizer==3.5.1
     # via requests
@@ -19,7 +19,7 @@ django==6.1.1
     # via
     #   -r requirements.in
     #   django-allauth
-django-allauth==65.19.5
+django-allauth[socialaccount]==65.19.5
     # via -r requirements.in
 h11==0.16.0
     # via uvicorn
@@ -27,19 +27,18 @@ idna==3.20
     # via requests
 oauthlib==3.3.1
     # via django-allauth
-pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.0
     # via cffi
-pyjwt==2.15.1
+pyjwt[crypto]==2.15.1
     # via
     #   -r requirements.in
     #   django-allauth
+    #   pyjwt
 requests==2.34.2
     # via django-allauth
 servestatic==4.3.4
     # via -r requirements.in
 sqlparse==0.6.0
-    # via django
-tzdata==2026.4 ; sys_platform == 'win32'
     # via django
 urllib3==2.8.0
     # via requests
